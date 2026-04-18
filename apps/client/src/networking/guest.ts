@@ -64,13 +64,13 @@ export class GuestSession {
         playersStore.loadPlayers(msg.players)
         this.spriteManager.clear()
         for (const s of msg.sprites) {
-          this.spriteManager.place(s, `/assets/sprites/${s.spriteId}.png`)
+          this.spriteManager.place(s, `/assets/sprites/${s.spriteId}.svg`)
         }
         break
       }
       case 'sprite:place': {
         roomStore.placeSprite({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy })
-        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy }, `/assets/sprites/${msg.spriteId}.png`)
+        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy }, `/assets/sprites/${msg.spriteId}.svg`)
         break
       }
       case 'sprite:move': {

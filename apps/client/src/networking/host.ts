@@ -12,6 +12,7 @@ import type { Scene } from '@babylonjs/core'
 export class HostSession {
   private peers = new Map<string, PeerConnection>()
   private signaling: SignalingClient
+  private currentRoomId: string | null = null
 
   constructor(
     private scene: Scene,
@@ -26,13 +27,21 @@ export class HostSession {
       onOffer: () => {},
       onHostDisconnected: () => {},
       onGuestLeft: (guestSocketId) => this.handleGuestLeft(guestSocketId),
-    })
+    }, () => this.handleReconnect())
 
     this.signaling.createRoom().then((roomId) => {
+      this.currentRoomId = roomId
       useRoomStore.getState().setRoomId(roomId)
       onRoomCreated(roomId)
     }).catch((err: unknown) => {
       console.error('Failed to create room:', err)
+    })
+  }
+
+  private handleReconnect(): void {
+    if (!this.currentRoomId) return
+    this.signaling.createRoom(this.currentRoomId).catch((err: unknown) => {
+      console.error('Failed to re-register room after reconnect:', err)
     })
   }
 
@@ -66,7 +75,7 @@ export class HostSession {
     switch (msg.type) {
       case 'sprite:place': {
         roomStore.placeSprite({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy })
-        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy }, `/assets/sprites/${msg.spriteId}.png`)
+        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy }, `/assets/sprites/${msg.spriteId}.svg`)
         break
       }
       case 'sprite:move': {

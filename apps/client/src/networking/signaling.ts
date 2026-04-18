@@ -14,7 +14,7 @@ export interface SignalingEvents {
 export class SignalingClient {
   private socket: Socket
 
-  constructor(events: SignalingEvents) {
+  constructor(events: SignalingEvents, onReconnect?: () => void) {
     this.socket = io(SIGNALING_URL, { transports: ['websocket'] })
     this.socket.on('guest-joined', events.onGuestJoined)
     this.socket.on('offer', ({ from, offer }: { from: string; offer: RTCSessionDescriptionInit }) =>
@@ -25,15 +25,22 @@ export class SignalingClient {
       events.onIceCandidate(from, candidate))
     this.socket.on('host-disconnected', events.onHostDisconnected)
     this.socket.on('guest-left', events.onGuestLeft)
+    let firstConnect = true
+    this.socket.on('connect', () => {
+      if (firstConnect) { firstConnect = false; return }
+      onReconnect?.()
+    })
   }
 
-  createRoom(): Promise<string> {
+  createRoom(existingRoomId?: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('create-room timeout')), 10_000)
-      this.socket.emit('create-room', ({ roomId }: { roomId: string }) => {
-        clearTimeout(timer)
-        resolve(roomId)
-      })
+      const ack = ({ roomId }: { roomId: string }) => { clearTimeout(timer); resolve(roomId) }
+      if (existingRoomId) {
+        this.socket.emit('create-room', { roomId: existingRoomId }, ack)
+      } else {
+        this.socket.emit('create-room', ack)
+      }
     })
   }
 

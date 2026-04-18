@@ -15,9 +15,12 @@ const io = new Server(http, {
 })
 
 io.on('connection', (socket) => {
-  socket.on('create-room', (cb: unknown) => {
+  socket.on('create-room', (payloadOrCb: unknown, maybeCb?: unknown) => {
+    const hasPayload = typeof payloadOrCb === 'object' && payloadOrCb !== null
+    const cb = hasPayload ? maybeCb : payloadOrCb
+    const existingRoomId = hasPayload ? (payloadOrCb as Record<string, unknown>).roomId as string | undefined : undefined
     if (!isCallback(cb)) return
-    const entry = registry.create(socket.id)
+    const entry = registry.create(socket.id, existingRoomId)
     socket.join(entry.roomId)
     cb({ roomId: entry.roomId })
   })

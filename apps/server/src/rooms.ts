@@ -11,9 +11,9 @@ export class RoomRegistry {
   private rooms = new Map<string, RoomEntry>()
   private readonly TTL_MS = 24 * 60 * 60 * 1000
 
-  create(hostSocketId: string): RoomEntry {
+  create(hostSocketId: string, roomId?: string): RoomEntry {
     const entry: RoomEntry = {
-      roomId: nanoid(8),
+      roomId: roomId ?? nanoid(8),
       hostSocketId,
       guestSocketIds: [],
       createdAt: Date.now(),
