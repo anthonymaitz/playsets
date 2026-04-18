@@ -36,5 +36,5 @@ export type GameMessage =
   | { type: 'sprite:emote'; instanceId: string; emote: string }
   | { type: 'sprite:drag'; instanceId: string; col: number; row: number }
   | { type: 'cursor:move'; playerId: string; worldX: number; worldZ: number }
-  | { type: 'player:join'; playerId: string; displayName: string; color: string }
+  | ({ type: 'player:join' } & Player)
   | { type: 'player:leave'; playerId: string }
