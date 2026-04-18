@@ -24,6 +24,7 @@ export class DragController {
     originalRow: number
   } | null = null
   private ghost: Mesh | null = null
+  private hasMoved = false
 
   constructor(
     private scene: Scene,
@@ -48,6 +49,7 @@ export class DragController {
     const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
 
     this.dragging = { instanceId, originalCol: col, originalRow: row }
+    this.hasMoved = false
     this.spriteManager.setHighlight(instanceId, true)
 
     this.ghost = MeshBuilder.CreateBox('ghost', { size: 0.85 }, this.scene)
@@ -63,6 +65,7 @@ export class DragController {
     if (!this.dragging || !this.ghost) return
     const cell = this.pickGroundCell()
     if (!cell) return
+    this.hasMoved = true
     const { x, z } = cellToWorld(cell.col, cell.row)
     this.ghost.position.x = x
     this.ghost.position.z = z
@@ -72,13 +75,18 @@ export class DragController {
   private onUp(): void {
     if (!this.dragging) return
     const { instanceId, originalCol, originalRow } = this.dragging
-    const cell = this.pickGroundCell()
 
-    if (cell) {
-      this.spriteManager.move(instanceId, cell.col, cell.row)
-      this.callbacks.onDragDrop(instanceId, cell.col, cell.row)
+    if (!this.hasMoved) {
+      this.callbacks.onSpriteClick(instanceId)
     } else {
-      this.spriteManager.move(instanceId, originalCol, originalRow)
+      const cell = this.pickGroundCell()
+      if (cell) {
+        this.spriteManager.move(instanceId, cell.col, cell.row)
+        this.callbacks.onDragDrop(instanceId, cell.col, cell.row)
+      } else {
+        this.spriteManager.move(instanceId, originalCol, originalRow)
+        this.callbacks.onDragDrop(instanceId, originalCol, originalRow)
+      }
     }
 
     this.spriteManager.setHighlight(instanceId, false)
