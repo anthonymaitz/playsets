@@ -12,6 +12,7 @@ export class GuestSession {
   private peer: PeerConnection | null = null
   private signaling: SignalingClient
   private onHostDisconnected: () => void
+  private pendingCandidates: RTCIceCandidateInit[] = []
 
   constructor(
     roomId: string,
@@ -27,7 +28,10 @@ export class GuestSession {
       onGuestLeft: () => {},
       onOffer: (from, offer) => this.handleOffer(from, offer, onConnected),
       onAnswer: () => {},
-      onIceCandidate: (_from, candidate) => this.peer?.addIceCandidate(candidate),
+      onIceCandidate: (_from, candidate) => {
+        if (this.peer) void this.peer.addIceCandidate(candidate)
+        else this.pendingCandidates.push(candidate)
+      },
       onHostDisconnected,
     })
 
@@ -51,6 +55,9 @@ export class GuestSession {
     })
     this.peer.listenForChannels()
     const answer = await this.peer.setRemoteOffer(offer)
+    // Flush any ICE candidates that arrived before peer was ready
+    for (const c of this.pendingCandidates) void this.peer.addIceCandidate(c)
+    this.pendingCandidates = []
     this.signaling.sendAnswer(hostSocketId, answer)
   }
 

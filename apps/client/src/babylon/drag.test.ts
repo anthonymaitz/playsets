@@ -87,6 +87,7 @@ function makeSpriteManager(instanceId: string, meshPos = { x: 2, y: 0, z: 3 }) {
     getMesh: vi.fn(() => mesh),
     move: vi.fn(),
     setHighlight: vi.fn(),
+    hidePlacementGhost: vi.fn(),
     _mesh: mesh,
   }
 }

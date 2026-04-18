@@ -26,8 +26,17 @@ export class DragController {
   } | null = null
   private ghost: Mesh | null = null
   private hasMoved = false
+  private justDropped = false
   private observer: Observer<PointerInfo> | null = null
   private onBlur = (): void => { this.onUp() }
+
+  isDragging(): boolean { return this.dragging !== null }
+
+  consumeJustDropped(): boolean {
+    const v = this.justDropped
+    this.justDropped = false
+    return v
+  }
 
   constructor(
     private scene: Scene,
@@ -47,6 +56,7 @@ export class DragController {
     if (!picked) return
     const instanceId = this.spriteManager.getInstanceId(picked)
     if (!instanceId) return
+    this.spriteManager.hidePlacementGhost()
 
     const mesh = this.spriteManager.getMesh(instanceId)
     if (!mesh) return
@@ -83,6 +93,7 @@ export class DragController {
     if (!this.hasMoved) {
       this.callbacks.onSpriteClick(instanceId)
     } else {
+      this.justDropped = true
       const cell = this.pickGroundCell()
       if (cell) {
         this.spriteManager.move(instanceId, cell.col, cell.row)

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene } from '@babylonjs/core'
 import { createScene } from '../babylon/scene'
 import { createGrid, worldToCell } from '../babylon/grid'
@@ -27,6 +28,8 @@ export function RoomPage() {
   const sceneRef = useRef<Scene | null>(null)
   const sessionRef = useRef<HostSession | GuestSession | null>(null)
   const selectedSpriteRef = useRef<SpriteManifestEntry | null>(null)
+  const spriteManagerRef = useRef<SpriteManager | null>(null)
+  const dragControllerRef = useRef<DragController | null>(null)
 
   const [needsName, setNeedsName] = useState(true)
   const [selectedSprite, setSelectedSprite] = useState<SpriteManifestEntry | null>(null)
@@ -38,6 +41,12 @@ export function RoomPage() {
     selectedSpriteRef.current = s
   }
 
+  const handleDeselectSprite = () => {
+    setSelectedSprite(null)
+    selectedSpriteRef.current = null
+    spriteManagerRef.current?.hidePlacementGhost()
+  }
+
   useEffect(() => {
     if (needsName || !canvasRef.current) return
 
@@ -45,9 +54,10 @@ export function RoomPage() {
     sceneRef.current = scene
     createGrid(scene)
     const spriteManager = new SpriteManager(scene)
+    spriteManagerRef.current = spriteManager
     const cursorManager = new CursorManager(scene)
 
-    new DragController(scene, spriteManager, {
+    const dragController = new DragController(scene, spriteManager, {
       onDragMove: (instanceId, col, row) => {
         const msg = { type: 'sprite:drag' as const, instanceId, col, row }
         if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
@@ -61,8 +71,29 @@ export function RoomPage() {
       },
       onSpriteClick: () => {},
     })
+    dragControllerRef.current = dragController
+
+    // Show a live ghost preview of the selected sprite as the cursor moves over the grid
+    scene.onPointerObservable.add((info) => {
+      if (info.type !== PointerEventTypes.POINTERMOVE) return
+      const sprite = selectedSpriteRef.current
+      if (!sprite || dragController.isDragging()) {
+        spriteManager.hidePlacementGhost()
+        return
+      }
+      const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+      if (!pick?.hit || !pick.pickedPoint) {
+        spriteManager.hidePlacementGhost()
+        return
+      }
+      const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+      spriteManager.showPlacementGhost(sprite.id, sprite.path, col, row)
+    })
 
     const handlePointerUp = (e: PointerEvent) => {
+      // If an existing sprite was just drag-dropped, skip all other logic
+      if (dragController.consumeJustDropped()) return
+
       const pick = scene.pick(scene.pointerX, scene.pointerY)
       const instanceId = pick?.pickedMesh?.metadata?.instanceId as string | undefined
       if (instanceId) {
@@ -83,8 +114,17 @@ export function RoomPage() {
       }
     }
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedSprite(null)
+        selectedSpriteRef.current = null
+        spriteManager.hidePlacementGhost()
+      }
+    }
+
     const canvas = canvasRef.current
     canvas.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('keydown', handleKeyDown)
 
     if (isHost) {
       sessionRef.current = new HostSession(scene, spriteManager, cursorManager, (newRoomId) => {
@@ -104,6 +144,9 @@ export function RoomPage() {
 
     return () => {
       canvas.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('keydown', handleKeyDown)
+      spriteManagerRef.current = null
+      dragControllerRef.current = null
       sessionRef.current?.dispose()
       engine.dispose()
     }
@@ -114,7 +157,11 @@ export function RoomPage() {
   return (
     <>
       <TopBar />
-      <SpritePicker selectedSpriteId={selectedSprite?.id ?? null} onSelect={handleSelectSprite} />
+      <SpritePicker
+        selectedSpriteId={selectedSprite?.id ?? null}
+        onSelect={handleSelectSprite}
+        onDeselect={handleDeselectSprite}
+      />
       <canvas
         ref={canvasRef}
         style={{ position: 'fixed', top: 48, left: 200, right: 0, bottom: 0, width: 'calc(100vw - 200px)', height: 'calc(100vh - 48px)' }}

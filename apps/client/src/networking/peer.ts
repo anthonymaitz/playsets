@@ -24,9 +24,8 @@ export class PeerConnection {
       if (e.candidate) callbacks.onIceCandidate(e.candidate.toJSON())
     }
     this.pc.onconnectionstatechange = () => {
-      if (this.pc.connectionState === 'connected') {
-        if (!this.connected) { this.connected = true; callbacks.onConnected() }
-      }
+      // onConnected fires only from channel onopen handlers — channels must be
+      // confirmed open before sending, so we never trigger onConnected here
       if (['disconnected', 'failed', 'closed'].includes(this.pc.connectionState))
         callbacks.onDisconnected()
     }

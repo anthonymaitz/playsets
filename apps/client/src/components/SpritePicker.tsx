@@ -4,9 +4,10 @@ import type { SpriteCategory, SpriteManifest, SpriteManifestEntry } from '../typ
 interface Props {
   selectedSpriteId: string | null
   onSelect: (sprite: SpriteManifestEntry) => void
+  onDeselect: () => void
 }
 
-export function SpritePicker({ selectedSpriteId, onSelect }: Props) {
+export function SpritePicker({ selectedSpriteId, onSelect, onDeselect }: Props) {
   const [manifest, setManifest] = useState<SpriteManifest | null>(null)
   const [fetchError, setFetchError] = useState(false)
   const [search, setSearch] = useState('')
@@ -67,13 +68,19 @@ export function SpritePicker({ selectedSpriteId, onSelect }: Props) {
           {openCategory === cat.id && cat.sprites.map((sprite) => (
             <button
               key={sprite.id}
-              onClick={() => onSelect(sprite)}
+              onPointerDown={(e) => {
+                e.currentTarget.releasePointerCapture(e.pointerId)
+                if (selectedSpriteId === sprite.id) onDeselect()
+                else onSelect(sprite)
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 width: '100%', padding: '6px 8px 6px 20px',
                 background: selectedSpriteId === sprite.id ? '#2d3f5a' : 'none',
-                border: 'none', color: '#ddd', fontSize: 13,
-                cursor: 'pointer', borderRadius: 4, textAlign: 'left',
+                border: selectedSpriteId === sprite.id ? '1px solid #3b82f6' : '1px solid transparent',
+                color: '#ddd', fontSize: 13,
+                cursor: selectedSpriteId === sprite.id ? 'crosshair' : 'grab',
+                borderRadius: 4, textAlign: 'left',
               }}
             >
               <img src={sprite.path} alt={sprite.label} style={{ width: 28, height: 28, objectFit: 'contain' }} />

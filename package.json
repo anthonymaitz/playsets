@@ -2,7 +2,7 @@
   "name": "playsets",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n server,client -c cyan,green \"pnpm dev:server\" \"pnpm dev:client\" \"sleep 3 && open http://localhost:9001 http://localhost:9000\"",
+    "dev": "concurrently -n server,client -c cyan,green \"pnpm dev:server\" \"pnpm dev:client\" \"sleep 3 && open http://localhost:9000\"",
     "dev:client": "pnpm --filter client dev",
     "dev:server": "pnpm --filter server dev",
     "test": "pnpm -r test",

@@ -16,6 +16,7 @@ const SPRITE_HEIGHT = CELL_SIZE * 1.6
 export class SpriteManager {
   private meshes = new Map<string, Mesh>()
   private textureCache = new Map<string, Texture>()
+  private ghost: { mesh: Mesh; mat: StandardMaterial; spriteId: string } | null = null
 
   constructor(private scene: Scene) {}
 
@@ -80,6 +81,33 @@ export class SpriteManager {
 
   getMesh(instanceId: string): Mesh | undefined {
     return this.meshes.get(instanceId)
+  }
+
+  showPlacementGhost(spriteId: string, path: string, col: number, row: number): void {
+    const { x, z } = cellToWorld(col, row)
+    if (this.ghost?.spriteId !== spriteId) {
+      this.hidePlacementGhost()
+      const mesh = MeshBuilder.CreatePlane('placement-ghost', { width: CELL_SIZE * 0.9, height: SPRITE_HEIGHT }, this.scene)
+      mesh.billboardMode = Mesh.BILLBOARDMODE_Y
+      const mat = new StandardMaterial('placement-ghost-mat', this.scene)
+      const tex = this.getTexture(path)
+      tex.hasAlpha = true
+      mat.diffuseTexture = tex
+      mat.useAlphaFromDiffuseTexture = true
+      mat.backFaceCulling = false
+      mat.alpha = 0.65
+      mesh.material = mat
+      this.ghost = { mesh, mat, spriteId }
+    }
+    this.ghost.mesh.position = new Vector3(x, SPRITE_HEIGHT / 2, z)
+    this.ghost.mesh.isVisible = true
+  }
+
+  hidePlacementGhost(): void {
+    if (!this.ghost) return
+    this.ghost.mesh.dispose()
+    this.ghost.mat.dispose()
+    this.ghost = null
   }
 
   clear(): void {
