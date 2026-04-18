@@ -2,7 +2,12 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { RoomRegistry } from './rooms.js'
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001
+function isCallback(fn: unknown): fn is (...args: unknown[]) => void {
+  return typeof fn === 'function'
+}
+
+const rawPort = parseInt(process.env.PORT ?? '', 10)
+const PORT = Number.isNaN(rawPort) ? 3001 : rawPort
 const registry = new RoomRegistry()
 const http = createServer()
 const io = new Server(http, {
@@ -10,13 +15,15 @@ const io = new Server(http, {
 })
 
 io.on('connection', (socket) => {
-  socket.on('create-room', (cb: (res: { roomId: string }) => void) => {
+  socket.on('create-room', (cb: unknown) => {
+    if (!isCallback(cb)) return
     const entry = registry.create(socket.id)
     socket.join(entry.roomId)
     cb({ roomId: entry.roomId })
   })
 
-  socket.on('join-room', (roomId: string, cb: (res: { error?: string }) => void) => {
+  socket.on('join-room', (roomId: string, cb: unknown) => {
+    if (!isCallback(cb)) return
     const result = registry.addGuest(roomId, socket.id)
     if (result === 'not-found') { cb({ error: 'room-not-found' }); return }
     if (result === 'full') { cb({ error: 'room-full' }); return }
