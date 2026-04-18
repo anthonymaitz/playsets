@@ -59,4 +59,11 @@ describe('RoomRegistry', () => {
     registry.addGuest(roomId, 'guest')
     expect(registry.findRoomBySocket('guest')?.roomId).toBe(roomId)
   })
+
+  it('ignores duplicate guest socket ids', () => {
+    const { roomId } = registry.create('host')
+    registry.addGuest(roomId, 'same-guest')
+    registry.addGuest(roomId, 'same-guest')
+    expect(registry.get(roomId)?.guestSocketIds).toHaveLength(1)
+  })
 })

@@ -35,6 +35,7 @@ export class RoomRegistry {
   addGuest(roomId: string, guestSocketId: string): 'ok' | 'full' | 'not-found' {
     const entry = this.get(roomId)
     if (!entry) return 'not-found'
+    if (entry.guestSocketIds.includes(guestSocketId)) return 'ok'
     if (entry.guestSocketIds.length >= 3) return 'full'
     entry.guestSocketIds.push(guestSocketId)
     return 'ok'
@@ -55,7 +56,9 @@ export class RoomRegistry {
   }
 
   findRoomBySocket(socketId: string): RoomEntry | undefined {
-    for (const entry of this.rooms.values()) {
+    for (const roomId of this.rooms.keys()) {
+      const entry = this.get(roomId)
+      if (!entry) continue
       if (entry.hostSocketId === socketId || entry.guestSocketIds.includes(socketId)) {
         return entry
       }
