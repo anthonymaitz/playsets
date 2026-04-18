@@ -6,6 +6,7 @@ import {
   Color3,
   Mesh,
   Vector3,
+  Observer,
 } from '@babylonjs/core'
 import type { PointerInfo } from '@babylonjs/core'
 import { SpriteManager } from './sprites'
@@ -25,17 +26,20 @@ export class DragController {
   } | null = null
   private ghost: Mesh | null = null
   private hasMoved = false
+  private observer: Observer<PointerInfo> | null = null
+  private onBlur = (): void => { this.onUp() }
 
   constructor(
     private scene: Scene,
     private spriteManager: SpriteManager,
     private callbacks: DragCallbacks,
   ) {
-    this.scene.onPointerObservable.add((info) => {
+    this.observer = this.scene.onPointerObservable.add((info) => {
       if (info.type === PointerEventTypes.POINTERDOWN) this.onDown(info)
       if (info.type === PointerEventTypes.POINTERMOVE) this.onMove()
       if (info.type === PointerEventTypes.POINTERUP) this.onUp()
     })
+    window.addEventListener('blur', this.onBlur)
   }
 
   private onDown(info: PointerInfo): void {
@@ -108,6 +112,9 @@ export class DragController {
   }
 
   dispose(): void {
+    window.removeEventListener('blur', this.onBlur)
+    this.scene.onPointerObservable.remove(this.observer)
+    this.observer = null
     this.ghost?.dispose()
     this.ghost = null
   }

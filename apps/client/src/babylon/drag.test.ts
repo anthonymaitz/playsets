@@ -61,11 +61,14 @@ type PickResult = { hit: boolean; pickedPoint: { x: number; z: number } | null }
 
 function makeScene(pickResult: PickResult) {
   let handler: PointerHandler | null = null
+  const mockObserver = {}
   return {
     onPointerObservable: {
       add: vi.fn((h: PointerHandler) => {
         handler = h
+        return mockObserver
       }),
+      remove: vi.fn(),
     },
     pointerX: 0,
     pointerY: 0,
@@ -73,6 +76,7 @@ function makeScene(pickResult: PickResult) {
     _fireEvent(type: number, pickedMesh?: object) {
       handler?.({ type, pickInfo: { pickedMesh } })
     },
+    _mockObserver: mockObserver,
   }
 }
 
@@ -177,13 +181,15 @@ describe('DragController', () => {
   })
 
   describe('dispose()', () => {
-    it('does not throw when ghost is null', () => {
+    it('does not throw when ghost is null and removes the pointer observable', () => {
       const scene = makeScene(null)
       const sm = makeSpriteManager(ID)
       const cb = makeCallbacks()
 
       const ctrl = new DragController(scene as never, sm as never, cb)
       expect(() => ctrl.dispose()).not.toThrow()
+      expect(scene.onPointerObservable.remove).toHaveBeenCalledOnce()
+      expect(scene.onPointerObservable.remove).toHaveBeenCalledWith(scene._mockObserver)
     })
   })
 })
