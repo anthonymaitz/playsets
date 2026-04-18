@@ -47,7 +47,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 
   const snapToIsometric = () => {
     const current = camera.alpha
-    const target = Math.round(current / SNAP) * SNAP
+    const OFFSET = Math.PI / 4  // corners face viewer, not flat edges
+    const target = Math.round((current - OFFSET) / SNAP) * SNAP + OFFSET
     if (Math.abs(current - target) < 0.001) return
     scene.stopAnimation(camera)
     Animation.CreateAndStartAnimation(
