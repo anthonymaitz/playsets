@@ -12,7 +12,7 @@ import { cellToWorld, CELL_SIZE } from './grid'
 import type { SpriteInstance } from '../types'
 
 const SPRITE_HEIGHT = CELL_SIZE * 1.6
-const TERRAIN_HEIGHT = CELL_SIZE * 0.18
+const TERRAIN_HEIGHT = CELL_SIZE * 0.4
 
 export class SpriteManager {
   private meshes = new Map<string, Mesh>()
@@ -24,7 +24,7 @@ export class SpriteManager {
   private getTexture(path: string): Texture {
     const cached = this.textureCache.get(path)
     if (cached) return cached
-    const tex = new Texture(path, this.scene, false, false)
+    const tex = new Texture(path, this.scene, false, true)
     this.textureCache.set(path, tex)
     return tex
   }

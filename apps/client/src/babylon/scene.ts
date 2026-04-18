@@ -28,7 +28,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   camera.lowerBetaLimit = Math.PI / 3.5
   camera.upperBetaLimit = Math.PI / 3.5
   camera.lowerRadiusLimit = 8
-  camera.upperRadiusLimit = 40
+  camera.upperRadiusLimit = 80
   camera.attachControl(canvas, true)
   camera.panningSensibility = 0
   camera.inertia = 0  // disable built-in inertia; snap animation provides the deceleration

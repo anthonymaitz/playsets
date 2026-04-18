@@ -1,17 +1,22 @@
 import { Scene, MeshBuilder, StandardMaterial, Color3, Vector3, Mesh } from '@babylonjs/core'
 
-export const GRID_COLS = 20
-export const GRID_ROWS = 20
+export const GRID_COLS = 60
+export const GRID_ROWS = 60
 export const CELL_SIZE = 1
+
+// Ground plane is much larger than the gameplay grid so it fills the screen
+// at all zoom levels and appears to extend infinitely.
+const GROUND_SIZE = 400
 
 export function createGrid(scene: Scene): Mesh {
   const ground = MeshBuilder.CreateGround(
     'ground',
-    { width: GRID_COLS * CELL_SIZE, height: GRID_ROWS * CELL_SIZE },
+    { width: GROUND_SIZE, height: GROUND_SIZE },
     scene,
   )
   const mat = new StandardMaterial('ground-mat', scene)
-  mat.diffuseColor = new Color3(0.18, 0.18, 0.22)
+  // Slightly green so the ground beyond the grass grid blends in
+  mat.diffuseColor = new Color3(0.1, 0.14, 0.1)
   mat.specularColor = Color3.Black()
   ground.material = mat
 
@@ -29,7 +34,7 @@ export function createGrid(scene: Scene): Mesh {
   }
   const lineSystem = MeshBuilder.CreateLineSystem('grid-lines', { lines }, scene)
   lineSystem.color = new Color3(0.35, 0.35, 0.42)
-  lineSystem.parent = ground  // dispose ground → disposes lines automatically
+  lineSystem.parent = ground
 
   return ground
 }
