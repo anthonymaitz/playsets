@@ -8,6 +8,7 @@ interface Props {
 
 export function SpritePicker({ selectedSpriteId, onSelect }: Props) {
   const [manifest, setManifest] = useState<SpriteManifest | null>(null)
+  const [fetchError, setFetchError] = useState(false)
   const [search, setSearch] = useState('')
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
@@ -15,7 +16,7 @@ export function SpritePicker({ selectedSpriteId, onSelect }: Props) {
     fetch('/assets/sprites/manifest.json')
       .then((r) => r.json())
       .then(setManifest)
-      .catch(() => setManifest({ categories: [] }))
+      .catch(() => setFetchError(true))
   }, [])
 
   const categories: SpriteCategory[] = manifest?.categories ?? []
@@ -25,6 +26,14 @@ export function SpritePicker({ selectedSpriteId, onSelect }: Props) {
       !search || s.label.toLowerCase().includes(search.toLowerCase()),
     ),
   })).filter((cat) => cat.sprites.length > 0)
+
+  if (fetchError) {
+    return (
+      <div style={{ position: 'fixed', top: 48, left: 0, bottom: 0, width: 200, background: '#1a1a22', borderRight: '1px solid #333', padding: 16, color: '#e74c3c', fontSize: 13, zIndex: 40 }}>
+        Failed to load sprites
+      </div>
+    )
+  }
 
   return (
     <div style={{

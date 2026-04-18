@@ -2,6 +2,7 @@ import { usePlayersStore } from '../store/players'
 
 export function PlayerList() {
   const { players, localPlayer } = usePlayersStore()
+  if (!localPlayer) return null
   const all = [localPlayer, ...players]
 
   return (
