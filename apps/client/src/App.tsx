@@ -1,21 +1,12 @@
-import { useEffect, useRef } from 'react'
-import { createScene } from './babylon/scene'
-import { createGrid } from './babylon/grid'
+import { Routes, Route } from 'react-router-dom'
+import { HomePage } from './pages/HomePage'
+import { RoomPage } from './pages/RoomPage'
 
 export default function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    if (!canvasRef.current) return
-    const ctx = createScene(canvasRef.current)
-    createGrid(ctx.scene)
-    return () => ctx.dispose()
-  }, [])
-
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100vw', height: '100vh', display: 'block' }}
-    />
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/room/:roomId" element={<RoomPage />} />
+    </Routes>
   )
 }
