@@ -84,16 +84,17 @@ export function RoomPage() {
       }
     }
 
-    canvasRef.current.addEventListener('pointerup', handlePointerUp)
+    const canvas = canvasRef.current
+    canvas.addEventListener('pointerup', handlePointerUp)
 
     if (isHost) {
       sessionRef.current = new HostSession(scene, spriteManager, cursorManager, (newRoomId) => {
         window.history.replaceState(null, '', `/room/${newRoomId}`)
         useRoomStore.getState().setRoomId(newRoomId)
       })
-    } else {
+    } else if (roomId && roomId !== 'new') {
       sessionRef.current = new GuestSession(
-        roomId!,
+        roomId,
         scene,
         spriteManager,
         cursorManager,
@@ -103,7 +104,7 @@ export function RoomPage() {
     }
 
     return () => {
-      canvasRef.current?.removeEventListener('pointerup', handlePointerUp)
+      canvas.removeEventListener('pointerup', handlePointerUp)
       sessionRef.current?.dispose()
       engine.dispose()
     }
