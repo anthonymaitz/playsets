@@ -1,0 +1,15 @@
+{
+  "categories": [
+    {
+      "id": "tokens",
+      "label": "Tokens",
+      "sprites": [
+        {
+          "id": "tokens/warrior",
+          "label": "Warrior",
+          "path": "/assets/sprites/tokens/warrior.png"
+        }
+      ]
+    }
+  ]
+}

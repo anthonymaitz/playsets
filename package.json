@@ -4,6 +4,7 @@
   "scripts": {
     "dev:client": "pnpm --filter client dev",
     "dev:server": "pnpm --filter server dev",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "generate-manifest": "node scripts/generate-manifest.mjs"
   }
 }
