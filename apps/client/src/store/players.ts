@@ -15,14 +15,23 @@ interface PlayersStore {
 }
 
 function makeLocalPlayer(): Player {
-  const stored = localStorage.getItem('playsets-player')
-  if (stored) return JSON.parse(stored) as Player
+  if (typeof localStorage !== 'undefined') {
+    const stored = localStorage.getItem('playsets-player')
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<Player>
+      if (parsed.playerId && parsed.displayName !== undefined && parsed.color) {
+        return parsed as Player
+      }
+    }
+  }
   const player: Player = {
     playerId: nanoid(),
     displayName: '',
     color: PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)],
   }
-  localStorage.setItem('playsets-player', JSON.stringify(player))
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('playsets-player', JSON.stringify(player))
+  }
   return player
 }
 
@@ -31,7 +40,9 @@ export const usePlayersStore = create<PlayersStore>((set, get) => ({
   players: [],
   setDisplayName: (name) => {
     const updated = { ...get().localPlayer, displayName: name }
-    localStorage.setItem('playsets-player', JSON.stringify(updated))
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('playsets-player', JSON.stringify(updated))
+    }
     set({ localPlayer: updated })
   },
   addPlayer: (p) => set((s) => ({ players: [...s.players.filter((x) => x.playerId !== p.playerId), p] })),

@@ -18,12 +18,12 @@ export const useRoomStore = create<RoomStore>((set) => ({
   setRoomId: (id) => set({ roomId: id }),
   placeSprite: (s) => set((state) => ({ sprites: { ...state.sprites, [s.instanceId]: s } })),
   moveSprite: (instanceId, col, row) =>
-    set((state) => ({
-      sprites: {
-        ...state.sprites,
-        [instanceId]: { ...state.sprites[instanceId], col, row },
-      },
-    })),
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return {
+        sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], col, row } },
+      }
+    }),
   removeSprite: (instanceId) =>
     set((state) => {
       const next = { ...state.sprites }
