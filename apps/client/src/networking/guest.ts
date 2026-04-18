@@ -11,6 +11,7 @@ import type { Scene } from '@babylonjs/core'
 export class GuestSession {
   private peer: PeerConnection | null = null
   private signaling: SignalingClient
+  private onHostDisconnected: () => void
 
   constructor(
     roomId: string,
@@ -20,6 +21,7 @@ export class GuestSession {
     onConnected: () => void,
     onHostDisconnected: () => void,
   ) {
+    this.onHostDisconnected = onHostDisconnected
     this.signaling = new SignalingClient({
       onGuestJoined: () => {},
       onGuestLeft: () => {},
@@ -45,7 +47,7 @@ export class GuestSession {
         this.send({ type: 'player:join', playerId: localPlayer.playerId, displayName: localPlayer.displayName, color: localPlayer.color })
         onConnected()
       },
-      onDisconnected: () => {},
+      onDisconnected: () => this.onHostDisconnected(),
     })
     this.peer.listenForChannels()
     const answer = await this.peer.setRemoteOffer(offer)

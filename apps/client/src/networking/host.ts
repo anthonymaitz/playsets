@@ -31,6 +31,8 @@ export class HostSession {
     this.signaling.createRoom().then((roomId) => {
       useRoomStore.getState().setRoomId(roomId)
       onRoomCreated(roomId)
+    }).catch((err: unknown) => {
+      console.error('Failed to create room:', err)
     })
   }
 
