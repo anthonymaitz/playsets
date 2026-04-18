@@ -29,6 +29,7 @@ export function createGrid(scene: Scene): Mesh {
   }
   const lineSystem = MeshBuilder.CreateLineSystem('grid-lines', { lines }, scene)
   lineSystem.color = new Color3(0.35, 0.35, 0.42)
+  lineSystem.parent = ground  // dispose ground → disposes lines automatically
 
   return ground
 }
