@@ -16,6 +16,7 @@ export class PeerConnection {
   private pc: RTCPeerConnection
   private reliableChannel: RTCDataChannel | null = null
   private lossyChannel: RTCDataChannel | null = null
+  private connected = false
 
   constructor(private callbacks: PeerCallbacks) {
     this.pc = new RTCPeerConnection({ iceServers: STUN_SERVERS })
@@ -23,7 +24,9 @@ export class PeerConnection {
       if (e.candidate) callbacks.onIceCandidate(e.candidate.toJSON())
     }
     this.pc.onconnectionstatechange = () => {
-      if (this.pc.connectionState === 'connected') callbacks.onConnected()
+      if (this.pc.connectionState === 'connected') {
+        if (!this.connected) { this.connected = true; callbacks.onConnected() }
+      }
       if (['disconnected', 'failed', 'closed'].includes(this.pc.connectionState))
         callbacks.onDisconnected()
     }
@@ -54,7 +57,7 @@ export class PeerConnection {
         this.lossyChannel.onmessage = (ev) => this.handleMessage(ev.data as string)
       }
       if (this.reliableChannel && this.lossyChannel) {
-        this.callbacks.onConnected()
+        if (!this.connected) { this.connected = true; this.callbacks.onConnected() }
       }
     }
   }
@@ -90,13 +93,17 @@ export class PeerConnection {
     if (this.reliableChannel) {
       this.reliableChannel.onmessage = (e) => this.handleMessage(e.data as string)
       this.reliableChannel.onopen = () => {
-        if (this.lossyChannel?.readyState === 'open') this.callbacks.onConnected()
+        if (this.lossyChannel?.readyState === 'open') {
+          if (!this.connected) { this.connected = true; this.callbacks.onConnected() }
+        }
       }
     }
     if (this.lossyChannel) {
       this.lossyChannel.onmessage = (e) => this.handleMessage(e.data as string)
       this.lossyChannel.onopen = () => {
-        if (this.reliableChannel?.readyState === 'open') this.callbacks.onConnected()
+        if (this.reliableChannel?.readyState === 'open') {
+          if (!this.connected) { this.connected = true; this.callbacks.onConnected() }
+        }
       }
     }
   }

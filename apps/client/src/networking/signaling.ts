@@ -28,14 +28,22 @@ export class SignalingClient {
   }
 
   createRoom(): Promise<string> {
-    return new Promise((resolve) => {
-      this.socket.emit('create-room', ({ roomId }: { roomId: string }) => resolve(roomId))
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('create-room timeout')), 10_000)
+      this.socket.emit('create-room', ({ roomId }: { roomId: string }) => {
+        clearTimeout(timer)
+        resolve(roomId)
+      })
     })
   }
 
   joinRoom(roomId: string): Promise<{ error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('join-room', roomId, resolve)
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('join-room timeout')), 10_000)
+      this.socket.emit('join-room', roomId, (result: { error?: string }) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
     })
   }
 
