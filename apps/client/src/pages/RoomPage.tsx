@@ -87,17 +87,21 @@ export function RoomPage() {
         if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
       },
       onSpriteClick: (instanceId) => {
-        if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) {
-          showDirPickerAtPointer(instanceId)
-        } else {
-          const rect = canvasRef.current?.getBoundingClientRect()
-          setEmoteMenu({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
-        }
+        const rect = canvasRef.current?.getBoundingClientRect()
+        const sx = (rect?.left ?? 0) + scene.pointerX
+        const sy = (rect?.top ?? 0) + scene.pointerY
+        setEmoteMenu({ instanceId, x: sx, y: sy })
+        if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
       },
     })
     dragControllerRef.current = dragController
 
     scene.onPointerObservable.add((info) => {
+      // Dismiss direction picker on any canvas click (but not on pointer-up after placing)
+      if (info.type === PointerEventTypes.POINTERDOWN) {
+        setDirectionPicker(null)
+      }
+
       if (info.type !== PointerEventTypes.POINTERMOVE) return
 
       const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
@@ -232,7 +236,7 @@ export function RoomPage() {
             if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
             else (sessionRef.current as GuestSession | null)?.send(msg)
           }}
-          onClose={() => setEmoteMenu(null)}
+          onClose={() => { setEmoteMenu(null); setDirectionPicker(null) }}
         />
       )}
       {directionPicker && (

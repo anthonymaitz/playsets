@@ -16,12 +16,9 @@ const ARROWS: { dir: FacingDir; label: string; dx: number; dy: number }[] = [
   { dir: 'w', label: '↙ W', dx: -56, dy:  44 },
 ]
 
-export function DirectionPicker({ screenX, screenY, onPick, onDismiss }: Props) {
+export function DirectionPicker({ screenX, screenY, onPick }: Omit<Props, 'onDismiss'> & { onDismiss?: () => void }) {
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 75 }}
-      onPointerDown={onDismiss}
-    >
+    <>
       {ARROWS.map(({ dir, label, dx, dy }) => (
         <button
           key={dir}
@@ -32,6 +29,7 @@ export function DirectionPicker({ screenX, screenY, onPick, onDismiss }: Props) 
             top:  screenY + dy - 18,
             width: 52,
             height: 36,
+            zIndex: 70,
             background: 'rgba(15,15,20,0.88)',
             border: '1px solid rgba(255,210,50,0.7)',
             borderRadius: 6,
@@ -49,6 +47,6 @@ export function DirectionPicker({ screenX, screenY, onPick, onDismiss }: Props) 
           {label}
         </button>
       ))}
-    </div>
+    </>
   )
 }
