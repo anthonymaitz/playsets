@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene } from '@babylonjs/core'
 import { createScene } from '../babylon/scene'
-import { createGrid, worldToCell, GRID_COLS, GRID_ROWS } from '../babylon/grid'
+import { createGrid, worldToCell } from '../babylon/grid'
 import { SpriteManager } from '../babylon/sprites'
 import { DragController } from '../babylon/drag'
 import { CursorManager } from '../babylon/cursors'
@@ -20,7 +20,6 @@ import { useRoomStore } from '../store/room'
 import type { SpriteManifestEntry, FacingDir } from '../types'
 import { nanoid } from 'nanoid'
 
-const GRASS_PATH = '/assets/sprites/terrain/grass.svg'
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -68,17 +67,6 @@ export function RoomPage() {
     spriteManagerRef.current = spriteManager
     const cursorManager = new CursorManager(scene)
 
-    // Pre-fill every grid cell with a grass tile for the host's initial state
-    if (isHost) {
-      for (let row = 0; row < GRID_ROWS; row++) {
-        for (let col = 0; col < GRID_COLS; col++) {
-          const instanceId = `grass-${col}-${row}`
-          const instance = { instanceId, spriteId: 'terrain/grass', col, row, placedBy: 'system' }
-          useRoomStore.getState().placeSprite(instance)
-          spriteManager.place(instance, GRASS_PATH)
-        }
-      }
-    }
 
     const showDirPickerAtPointer = (instanceId: string) => {
       const rect = canvasRef.current?.getBoundingClientRect()
