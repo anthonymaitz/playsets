@@ -12,6 +12,7 @@ export interface SceneContext {
   engine: Engine
   scene: Scene
   camera: ArcRotateCamera
+  dispose: () => void
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneContext {
@@ -34,7 +35,17 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   light.groundColor = new Color3(0.3, 0.3, 0.4)
 
   engine.runRenderLoop(() => scene.render())
-  window.addEventListener('resize', () => engine.resize())
 
-  return { engine, scene, camera }
+  const onResize = () => engine.resize()
+  window.addEventListener('resize', onResize)
+
+  return {
+    engine,
+    scene,
+    camera,
+    dispose: () => {
+      window.removeEventListener('resize', onResize)
+      engine.dispose()
+    },
+  }
 }

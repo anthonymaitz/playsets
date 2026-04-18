@@ -6,8 +6,8 @@ export default function App() {
 
   useEffect(() => {
     if (!canvasRef.current) return
-    const { engine } = createScene(canvasRef.current)
-    return () => engine.dispose()
+    const ctx = createScene(canvasRef.current)
+    return () => ctx.dispose()
   }, [])
 
   return (
