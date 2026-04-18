@@ -1,0 +1,106 @@
+import {
+  Scene,
+  PointerEventTypes,
+  MeshBuilder,
+  StandardMaterial,
+  Color3,
+  Mesh,
+  Vector3,
+} from '@babylonjs/core'
+import type { PointerInfo } from '@babylonjs/core'
+import { SpriteManager } from './sprites'
+import { worldToCell, cellToWorld, GRID_COLS, GRID_ROWS } from './grid'
+
+export interface DragCallbacks {
+  onDragMove: (instanceId: string, col: number, row: number) => void
+  onDragDrop: (instanceId: string, col: number, row: number) => void
+  onSpriteClick: (instanceId: string) => void
+}
+
+export class DragController {
+  private dragging: {
+    instanceId: string
+    originalCol: number
+    originalRow: number
+  } | null = null
+  private ghost: Mesh | null = null
+
+  constructor(
+    private scene: Scene,
+    private spriteManager: SpriteManager,
+    private callbacks: DragCallbacks,
+  ) {
+    this.scene.onPointerObservable.add((info) => {
+      if (info.type === PointerEventTypes.POINTERDOWN) this.onDown(info)
+      if (info.type === PointerEventTypes.POINTERMOVE) this.onMove()
+      if (info.type === PointerEventTypes.POINTERUP) this.onUp()
+    })
+  }
+
+  private onDown(info: PointerInfo): void {
+    const picked = info.pickInfo?.pickedMesh
+    if (!picked) return
+    const instanceId = this.spriteManager.getInstanceId(picked)
+    if (!instanceId) return
+
+    const mesh = this.spriteManager.getMesh(instanceId)
+    if (!mesh) return
+    const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
+
+    this.dragging = { instanceId, originalCol: col, originalRow: row }
+    this.spriteManager.setHighlight(instanceId, true)
+
+    this.ghost = MeshBuilder.CreateBox('ghost', { size: 0.85 }, this.scene)
+    const ghostMat = new StandardMaterial('ghost-mat', this.scene)
+    ghostMat.diffuseColor = new Color3(0.5, 0.8, 1)
+    ghostMat.alpha = 0.4
+    this.ghost.material = ghostMat
+    const { x, z } = cellToWorld(col, row)
+    this.ghost.position = new Vector3(x, 0.3, z)
+  }
+
+  private onMove(): void {
+    if (!this.dragging || !this.ghost) return
+    const cell = this.pickGroundCell()
+    if (!cell) return
+    const { x, z } = cellToWorld(cell.col, cell.row)
+    this.ghost.position.x = x
+    this.ghost.position.z = z
+    this.callbacks.onDragMove(this.dragging.instanceId, cell.col, cell.row)
+  }
+
+  private onUp(): void {
+    if (!this.dragging) return
+    const { instanceId, originalCol, originalRow } = this.dragging
+    const cell = this.pickGroundCell()
+
+    if (cell) {
+      this.spriteManager.move(instanceId, cell.col, cell.row)
+      this.callbacks.onDragDrop(instanceId, cell.col, cell.row)
+    } else {
+      this.spriteManager.move(instanceId, originalCol, originalRow)
+    }
+
+    this.spriteManager.setHighlight(instanceId, false)
+    this.ghost?.dispose()
+    this.ghost = null
+    this.dragging = null
+  }
+
+  private pickGroundCell(): { col: number; row: number } | null {
+    const pick = this.scene.pick(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      (mesh) => mesh.name === 'ground',
+    )
+    if (!pick?.hit || !pick.pickedPoint) return null
+    const cell = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+    if (cell.col < 0 || cell.col >= GRID_COLS || cell.row < 0 || cell.row >= GRID_ROWS) return null
+    return cell
+  }
+
+  dispose(): void {
+    this.ghost?.dispose()
+    this.ghost = null
+  }
+}
