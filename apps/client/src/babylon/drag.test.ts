@@ -92,6 +92,10 @@ function makeSpriteManager(instanceId: string, meshPos = { x: 2, y: 0, z: 3 }) {
   }
 }
 
+function makeCamera() {
+  return { detachControl: vi.fn(), attachControl: vi.fn() }
+}
+
 function makeCallbacks() {
   return {
     onDragMove: vi.fn(),
@@ -120,7 +124,7 @@ describe('DragController', () => {
       const sm = makeSpriteManager(ID)
       const cb = makeCallbacks()
 
-      new DragController(scene as never, sm as never, cb)
+      new DragController(scene as never, sm as never, makeCamera() as never, cb)
 
       scene._fireEvent(PointerEventTypes.POINTERDOWN, sm._mesh)
       // no POINTERMOVE fired
@@ -139,7 +143,7 @@ describe('DragController', () => {
       const sm = makeSpriteManager(ID)
       const cb = makeCallbacks()
 
-      new DragController(scene as never, sm as never, cb)
+      new DragController(scene as never, sm as never, makeCamera() as never, cb)
 
       scene._fireEvent(PointerEventTypes.POINTERDOWN, sm._mesh)
       scene._fireEvent(PointerEventTypes.POINTERMOVE)
@@ -168,7 +172,7 @@ describe('DragController', () => {
       const sm = makeSpriteManager(ID, { x: 2, y: 0, z: 3 })
       const cb = makeCallbacks()
 
-      new DragController(scene as never, sm as never, cb)
+      new DragController(scene as never, sm as never, makeCamera() as never, cb)
 
       scene._fireEvent(PointerEventTypes.POINTERDOWN, sm._mesh)
       scene._fireEvent(PointerEventTypes.POINTERMOVE) // hasMoved = true
@@ -187,7 +191,7 @@ describe('DragController', () => {
       const sm = makeSpriteManager(ID)
       const cb = makeCallbacks()
 
-      const ctrl = new DragController(scene as never, sm as never, cb)
+      const ctrl = new DragController(scene as never, sm as never, makeCamera() as never, cb)
       expect(() => ctrl.dispose()).not.toThrow()
       expect(scene.onPointerObservable.remove).toHaveBeenCalledOnce()
       expect(scene.onPointerObservable.remove).toHaveBeenCalledWith(scene._mockObserver)

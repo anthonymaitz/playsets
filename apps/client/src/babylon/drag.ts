@@ -8,7 +8,7 @@ import {
   Vector3,
   Observer,
 } from '@babylonjs/core'
-import type { PointerInfo } from '@babylonjs/core'
+import type { PointerInfo, ArcRotateCamera } from '@babylonjs/core'
 import { SpriteManager } from './sprites'
 import { worldToCell, cellToWorld, GRID_COLS, GRID_ROWS } from './grid'
 
@@ -41,6 +41,7 @@ export class DragController {
   constructor(
     private scene: Scene,
     private spriteManager: SpriteManager,
+    private camera: ArcRotateCamera,
     private callbacks: DragCallbacks,
   ) {
     this.observer = this.scene.onPointerObservable.add((info) => {
@@ -64,6 +65,7 @@ export class DragController {
 
     this.dragging = { instanceId, originalCol: col, originalRow: row }
     this.hasMoved = false
+    this.camera.detachControl()
     this.spriteManager.setHighlight(instanceId, true)
 
     this.ghost = MeshBuilder.CreateBox('ghost', { size: 0.85 }, this.scene)
@@ -89,6 +91,8 @@ export class DragController {
   private onUp(): void {
     if (!this.dragging) return
     const { instanceId, originalCol, originalRow } = this.dragging
+
+    this.camera.attachControl()
 
     if (!this.hasMoved) {
       this.callbacks.onSpriteClick(instanceId)

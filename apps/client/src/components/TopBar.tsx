@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useRoomStore } from '../store/room'
-import { PlayerList } from './PlayerList'
+import { usePlayersStore } from '../store/players'
 
 export function TopBar() {
   const roomId = useRoomStore((s) => s.roomId)
-  const [showPlayers, setShowPlayers] = useState(false)
   const [copied, setCopied] = useState(false)
+  const { localPlayer, players } = usePlayersStore()
+  const allPlayers = [localPlayer, ...players]
 
   const copyLink = () => {
     if (!roomId) return
@@ -23,22 +24,35 @@ export function TopBar() {
       gap: 12, zIndex: 50,
     }}>
       <span style={{ fontWeight: 700, fontSize: 18, color: '#fff' }}>Playsets</span>
+
       {roomId && (
         <>
-          <span style={{ background: '#2a2a3a', borderRadius: 6, padding: '2px 10px', fontSize: 13, color: '#aaa' }}>
+          <span style={{ background: '#2a2a3a', borderRadius: 6, padding: '2px 10px', fontSize: 13, color: '#aaa', fontFamily: 'monospace' }}>
             {roomId}
           </span>
           <button onClick={copyLink} style={btnStyle}>
             {copied ? '✓ Copied' : 'Copy Link'}
           </button>
-          <div style={{ marginLeft: 'auto', position: 'relative' }}>
-            <button onClick={() => setShowPlayers((v) => !v)} style={btnStyle}>
-              Players ▾
-            </button>
-            {showPlayers && <PlayerList />}
-          </div>
         </>
       )}
+
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
+        {allPlayers.map((p) => (
+          <div key={p.playerId} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 9, height: 9, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+            <span style={{
+              fontSize: 13,
+              color: p.playerId === localPlayer.playerId ? '#fff' : '#bbb',
+              fontWeight: p.playerId === localPlayer.playerId ? 600 : 400,
+            }}>
+              {p.displayName || 'Anonymous'}
+              {p.playerId === localPlayer.playerId && (
+                <span style={{ fontSize: 11, color: '#555', marginLeft: 4 }}>you</span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

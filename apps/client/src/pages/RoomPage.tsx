@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene } from '@babylonjs/core'
 import { createScene } from '../babylon/scene'
-import { createGrid, worldToCell } from '../babylon/grid'
+import { createGrid, worldToCell, GRID_COLS, GRID_ROWS } from '../babylon/grid'
 import { SpriteManager } from '../babylon/sprites'
 import { DragController } from '../babylon/drag'
 import { CursorManager } from '../babylon/cursors'
@@ -18,6 +18,8 @@ import { usePlayersStore } from '../store/players'
 import { useRoomStore } from '../store/room'
 import type { SpriteManifestEntry } from '../types'
 import { nanoid } from 'nanoid'
+
+const GRASS_PATH = '/assets/sprites/terrain/grass.svg'
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -47,17 +49,36 @@ export function RoomPage() {
     spriteManagerRef.current?.hidePlacementGhost()
   }
 
+  // Set roomId in store for guests (host sets it after createRoom resolves)
+  useEffect(() => {
+    if (!isHost && roomId && roomId !== 'new') {
+      useRoomStore.getState().setRoomId(roomId)
+    }
+  }, [isHost, roomId])
+
   useEffect(() => {
     if (needsName || !canvasRef.current) return
 
-    const { engine, scene } = createScene(canvasRef.current)
+    const { engine, scene, camera } = createScene(canvasRef.current)
     sceneRef.current = scene
     createGrid(scene)
     const spriteManager = new SpriteManager(scene)
     spriteManagerRef.current = spriteManager
     const cursorManager = new CursorManager(scene)
 
-    const dragController = new DragController(scene, spriteManager, {
+    // Pre-fill every grid cell with a grass tile for the host's initial state
+    if (isHost) {
+      for (let row = 0; row < GRID_ROWS; row++) {
+        for (let col = 0; col < GRID_COLS; col++) {
+          const instanceId = `grass-${col}-${row}`
+          const instance = { instanceId, spriteId: 'terrain/grass', col, row, placedBy: 'system' }
+          useRoomStore.getState().placeSprite(instance)
+          spriteManager.place(instance, GRASS_PATH)
+        }
+      }
+    }
+
+    const dragController = new DragController(scene, spriteManager, camera, {
       onDragMove: (instanceId, col, row) => {
         const msg = { type: 'sprite:drag' as const, instanceId, col, row }
         if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
@@ -73,25 +94,34 @@ export function RoomPage() {
     })
     dragControllerRef.current = dragController
 
-    // Show a live ghost preview of the selected sprite as the cursor moves over the grid
     scene.onPointerObservable.add((info) => {
       if (info.type !== PointerEventTypes.POINTERMOVE) return
-      const sprite = selectedSpriteRef.current
-      if (!sprite || dragController.isDragging()) {
-        spriteManager.hidePlacementGhost()
-        return
-      }
+
       const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
-      if (!pick?.hit || !pick.pickedPoint) {
+
+      // Ghost preview while dragging from sidebar
+      const sprite = selectedSpriteRef.current
+      if (sprite && !dragController.isDragging()) {
+        if (pick?.hit && pick.pickedPoint) {
+          const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+          spriteManager.showPlacementGhost(sprite.id, sprite.path, col, row)
+        } else {
+          spriteManager.hidePlacementGhost()
+        }
+      } else if (!sprite) {
         spriteManager.hidePlacementGhost()
-        return
       }
-      const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-      spriteManager.showPlacementGhost(sprite.id, sprite.path, col, row)
+
+      // Broadcast cursor position to other players
+      if (pick?.hit && pick.pickedPoint) {
+        const { playerId } = usePlayersStore.getState().localPlayer
+        const msg = { type: 'cursor:move' as const, playerId, worldX: pick.pickedPoint.x, worldZ: pick.pickedPoint.z }
+        if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
+        else (sessionRef.current as GuestSession | null)?.send(msg)
+      }
     })
 
     const handlePointerUp = (e: PointerEvent) => {
-      // If an existing sprite was just drag-dropped, skip all other logic
       if (dragController.consumeJustDropped()) return
 
       const pick = scene.pick(scene.pointerX, scene.pointerY)
@@ -111,6 +141,23 @@ export function RoomPage() {
         spriteManager.place(instance, sprite.path)
         if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
         else (sessionRef.current as GuestSession | null)?.send(msg)
+        // Deselect after placing — only drag-and-drop, no persistent selection
+        setSelectedSprite(null)
+        selectedSpriteRef.current = null
+        spriteManager.hidePlacementGhost()
+      }
+    }
+
+    // Cancel sidebar drag if pointer released outside the canvas
+    const handleDocPointerUp = (e: PointerEvent) => {
+      if (!selectedSpriteRef.current) return
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+        setSelectedSprite(null)
+        selectedSpriteRef.current = null
+        spriteManagerRef.current?.hidePlacementGhost()
       }
     }
 
@@ -124,6 +171,7 @@ export function RoomPage() {
 
     const canvas = canvasRef.current
     canvas.addEventListener('pointerup', handlePointerUp)
+    document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
 
     if (isHost) {
@@ -144,6 +192,7 @@ export function RoomPage() {
 
     return () => {
       canvas.removeEventListener('pointerup', handlePointerUp)
+      document.removeEventListener('pointerup', handleDocPointerUp)
       window.removeEventListener('keydown', handleKeyDown)
       spriteManagerRef.current = null
       dragControllerRef.current = null
