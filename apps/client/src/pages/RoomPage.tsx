@@ -80,6 +80,11 @@ export function RoomPage() {
       }
     }
 
+    const showDirPickerAtPointer = (instanceId: string) => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      setDirectionPicker({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
+    }
+
     const dragController = new DragController(scene, spriteManager, camera, {
       onDragMove: (instanceId, col, row) => {
         const msg = { type: 'sprite:drag' as const, instanceId, col, row }
@@ -91,8 +96,16 @@ export function RoomPage() {
         useRoomStore.getState().moveSprite(instanceId, col, row)
         if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
         else (sessionRef.current as GuestSession | null)?.send(msg)
+        if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
       },
-      onSpriteClick: () => {},
+      onSpriteClick: (instanceId) => {
+        if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) {
+          showDirPickerAtPointer(instanceId)
+        } else {
+          const rect = canvasRef.current?.getBoundingClientRect()
+          setEmoteMenu({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
+        }
+      },
     })
     dragControllerRef.current = dragController
 
@@ -126,29 +139,29 @@ export function RoomPage() {
     const handlePointerUp = (e: PointerEvent) => {
       if (dragController.consumeJustDropped()) return
 
-      const pick = scene.pick(scene.pointerX, scene.pointerY)
-      const instanceId = pick?.pickedMesh?.metadata?.instanceId as string | undefined
-      if (instanceId) {
-        setEmoteMenu({ instanceId, x: e.clientX, y: e.clientY })
-        return
-      }
+      // Sprite clicks are handled entirely by DragController.onSpriteClick.
+      // This handler is only responsible for sidebar drag-and-drop placement.
       const sprite = selectedSpriteRef.current
-      if (sprite && pick?.hit && pick.pickedMesh?.name === 'ground' && pick.pickedPoint) {
-        const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-        const newInstanceId = nanoid()
-        const { localPlayer: lp } = usePlayersStore.getState()
-        const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId }
-        const msg = { type: 'sprite:place' as const, ...instance }
-        useRoomStore.getState().placeSprite(instance)
-        spriteManager.place(instance, sprite.path)
-        if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
-        else (sessionRef.current as GuestSession | null)?.send(msg)
-        setSelectedSprite(null)
-        selectedSpriteRef.current = null
-        spriteManager.hidePlacementGhost()
-        if (sprite.hasDirections) {
-          setDirectionPicker({ instanceId: newInstanceId, x: e.clientX, y: e.clientY })
-        }
+      if (!sprite) return
+
+      // Use a ground-only predicate so grass/prop sprites never block placement.
+      const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+      if (!pick?.hit || !pick.pickedPoint) return
+
+      const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+      const newInstanceId = nanoid()
+      const { localPlayer: lp } = usePlayersStore.getState()
+      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId }
+      const msg = { type: 'sprite:place' as const, ...instance }
+      useRoomStore.getState().placeSprite(instance)
+      spriteManager.place(instance, sprite.path)
+      if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
+      else (sessionRef.current as GuestSession | null)?.send(msg)
+      setSelectedSprite(null)
+      selectedSpriteRef.current = null
+      spriteManager.hidePlacementGhost()
+      if (sprite.hasDirections) {
+        setDirectionPicker({ instanceId: newInstanceId, x: e.clientX, y: e.clientY })
       }
     }
 
