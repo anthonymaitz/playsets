@@ -12,6 +12,7 @@ import { cellToWorld, CELL_SIZE } from './grid'
 import type { SpriteInstance } from '../types'
 
 const SPRITE_HEIGHT = CELL_SIZE * 1.6
+const TERRAIN_HEIGHT = CELL_SIZE * 0.18
 
 export class SpriteManager {
   private meshes = new Map<string, Mesh>()
@@ -31,13 +32,15 @@ export class SpriteManager {
   place(instance: SpriteInstance, spritePath: string): void {
     if (this.meshes.has(instance.instanceId)) return
     const { x, z } = cellToWorld(instance.col, instance.row)
+    const isTerrain = instance.spriteId.startsWith('terrain/')
+    const h = isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
 
     const plane = MeshBuilder.CreatePlane(
       `sprite-${instance.instanceId}`,
-      { width: CELL_SIZE * 0.9, height: SPRITE_HEIGHT },
+      { width: CELL_SIZE * 0.9, height: h },
       this.scene,
     )
-    plane.position = new Vector3(x, SPRITE_HEIGHT / 2, z)
+    plane.position = new Vector3(x, h / 2, z)
     plane.billboardMode = Mesh.BILLBOARDMODE_Y
 
     const mat = new StandardMaterial(`mat-${instance.instanceId}`, this.scene)
@@ -48,7 +51,7 @@ export class SpriteManager {
     mat.backFaceCulling = false
     plane.material = mat
 
-    plane.metadata = { instanceId: instance.instanceId }
+    plane.metadata = { instanceId: instance.instanceId, draggable: !isTerrain }
     this.meshes.set(instance.instanceId, plane)
   }
 

@@ -57,6 +57,7 @@ export class DragController {
     if (!picked) return
     const instanceId = this.spriteManager.getInstanceId(picked)
     if (!instanceId) return
+    if (picked.metadata?.draggable === false) return
     this.spriteManager.hidePlacementGhost()
 
     const mesh = this.spriteManager.getMesh(instanceId)
