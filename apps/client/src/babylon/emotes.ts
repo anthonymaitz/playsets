@@ -33,6 +33,7 @@ export function showEmote(scene: Scene, col: number, row: number, emote: string)
     plane.position.y = CELL_SIZE * 2.5 + t * CELL_SIZE
     plane.visibility = Math.max(0, 1 - t)
     if (elapsed >= EMOTE_DURATION_MS) {
+      mat.dispose()
       plane.dispose()
       texture.dispose()
       scene.onBeforeRenderObservable.remove(obs)
