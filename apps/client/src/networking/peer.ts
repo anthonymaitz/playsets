@@ -51,13 +51,20 @@ export class PeerConnection {
       if (e.channel.label === 'game-reliable') {
         this.reliableChannel = e.channel
         this.reliableChannel.onmessage = (ev) => this.handleMessage(ev.data as string)
+        this.reliableChannel.onopen = () => {
+          if (this.lossyChannel?.readyState === 'open') {
+            if (!this.connected) { this.connected = true; this.callbacks.onConnected() }
+          }
+        }
       }
       if (e.channel.label === 'game-lossy') {
         this.lossyChannel = e.channel
         this.lossyChannel.onmessage = (ev) => this.handleMessage(ev.data as string)
-      }
-      if (this.reliableChannel && this.lossyChannel) {
-        if (!this.connected) { this.connected = true; this.callbacks.onConnected() }
+        this.lossyChannel.onopen = () => {
+          if (this.reliableChannel?.readyState === 'open') {
+            if (!this.connected) { this.connected = true; this.callbacks.onConnected() }
+          }
+        }
       }
     }
   }

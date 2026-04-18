@@ -1,3 +1,27 @@
 {
-  "categories": []
+  "categories": [
+    {
+      "id": "tokens",
+      "label": "Tokens",
+      "sprites": [
+        { "id": "tokens/warrior", "label": "Warrior", "path": "/assets/sprites/tokens/warrior.svg" },
+        { "id": "tokens/mage", "label": "Mage", "path": "/assets/sprites/tokens/mage.svg" },
+        { "id": "tokens/rogue", "label": "Rogue", "path": "/assets/sprites/tokens/rogue.svg" }
+      ]
+    },
+    {
+      "id": "props",
+      "label": "Props",
+      "sprites": [
+        { "id": "props/barrel", "label": "Barrel", "path": "/assets/sprites/props/barrel.svg" }
+      ]
+    },
+    {
+      "id": "terrain",
+      "label": "Terrain",
+      "sprites": [
+        { "id": "terrain/grass", "label": "Grass", "path": "/assets/sprites/terrain/grass.svg" }
+      ]
+    }
+  ]
 }

@@ -8,8 +8,6 @@ npm-debug.log*
 .env
 .env.local
 vite.config.ts.timestamp-*
-apps/client/public/assets/sprites/tokens/
-apps/client/public/assets/sprites/props/
-apps/client/public/assets/sprites/terrain/
-apps/client/public/assets/sprites/effects/
+apps/client/public/assets/sprites/**/*.png
+apps/client/public/assets/sprites/**/*.webp
 .superpowers/

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { RoomRegistry } from './rooms'
+import { RoomRegistry } from './rooms.js'
 
 describe('RoomRegistry', () => {
   let registry: RoomRegistry

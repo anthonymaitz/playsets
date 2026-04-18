@@ -28,8 +28,7 @@ export function RoomPage() {
   const sessionRef = useRef<HostSession | GuestSession | null>(null)
   const selectedSpriteRef = useRef<SpriteManifestEntry | null>(null)
 
-  const { localPlayer } = usePlayersStore()
-  const [needsName, setNeedsName] = useState(!localPlayer.displayName)
+  const [needsName, setNeedsName] = useState(true)
   const [selectedSprite, setSelectedSprite] = useState<SpriteManifestEntry | null>(null)
   const [emoteMenu, setEmoteMenu] = useState<{ instanceId: string; x: number; y: number } | null>(null)
   const [connected, setConnected] = useState(isHost)

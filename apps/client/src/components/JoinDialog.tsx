@@ -4,8 +4,8 @@ import { usePlayersStore } from '../store/players'
 interface Props { onDone: () => void }
 
 export function JoinDialog({ onDone }: Props) {
-  const setDisplayName = usePlayersStore((s) => s.setDisplayName)
-  const [name, setName] = useState('')
+  const { setDisplayName, localPlayer } = usePlayersStore()
+  const [name, setName] = useState(localPlayer?.displayName ?? '')
 
   const submit = () => {
     if (!name.trim()) return
