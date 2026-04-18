@@ -13,10 +13,11 @@ import { GuestSession } from '../networking/guest'
 import { TopBar } from '../components/TopBar'
 import { SpritePicker } from '../components/SpritePicker'
 import { EmoteMenu } from '../components/EmoteMenu'
+import { DirectionPicker } from '../components/DirectionPicker'
 import { JoinDialog } from '../components/JoinDialog'
 import { usePlayersStore } from '../store/players'
 import { useRoomStore } from '../store/room'
-import type { SpriteManifestEntry } from '../types'
+import type { SpriteManifestEntry, FacingDir } from '../types'
 import { nanoid } from 'nanoid'
 
 const GRASS_PATH = '/assets/sprites/terrain/grass.svg'
@@ -36,6 +37,7 @@ export function RoomPage() {
   const [needsName, setNeedsName] = useState(true)
   const [selectedSprite, setSelectedSprite] = useState<SpriteManifestEntry | null>(null)
   const [emoteMenu, setEmoteMenu] = useState<{ instanceId: string; x: number; y: number } | null>(null)
+  const [directionPicker, setDirectionPicker] = useState<{ instanceId: string; x: number; y: number } | null>(null)
   const [connected, setConnected] = useState(isHost)
 
   const handleSelectSprite = (s: SpriteManifestEntry) => {
@@ -141,10 +143,12 @@ export function RoomPage() {
         spriteManager.place(instance, sprite.path)
         if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
         else (sessionRef.current as GuestSession | null)?.send(msg)
-        // Deselect after placing — only drag-and-drop, no persistent selection
         setSelectedSprite(null)
         selectedSpriteRef.current = null
         spriteManager.hidePlacementGhost()
+        if (sprite.hasDirections) {
+          setDirectionPicker({ instanceId: newInstanceId, x: e.clientX, y: e.clientY })
+        }
       }
     }
 
@@ -228,6 +232,22 @@ export function RoomPage() {
             else (sessionRef.current as GuestSession | null)?.send(msg)
           }}
           onClose={() => setEmoteMenu(null)}
+        />
+      )}
+      {directionPicker && (
+        <DirectionPicker
+          screenX={directionPicker.x}
+          screenY={directionPicker.y}
+          onPick={(facing: FacingDir) => {
+            const { instanceId } = directionPicker
+            useRoomStore.getState().faceSprite(instanceId, facing)
+            spriteManagerRef.current?.setFacing(instanceId, facing)
+            const msg = { type: 'sprite:face' as const, instanceId, facing }
+            if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
+            else (sessionRef.current as GuestSession | null)?.send(msg)
+            setDirectionPicker(null)
+          }}
+          onDismiss={() => setDirectionPicker(null)}
         />
       )}
       {!connected && !isHost && (

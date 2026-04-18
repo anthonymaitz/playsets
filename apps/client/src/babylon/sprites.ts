@@ -9,13 +9,27 @@ import {
   AbstractMesh,
 } from '@babylonjs/core'
 import { cellToWorld, CELL_SIZE } from './grid'
-import type { SpriteInstance } from '../types'
+import type { SpriteInstance, FacingDir } from '../types'
 
 const SPRITE_HEIGHT = CELL_SIZE * 1.6
 const TERRAIN_HEIGHT = CELL_SIZE * 0.4
 
+// Facing direction → rotation.y angle for the ground indicator (pointing from center toward direction)
+const FACING_ANGLE: Record<FacingDir, number> = {
+  s: 0,
+  n: Math.PI,
+  e: -Math.PI / 2,
+  w: Math.PI / 2,
+}
+
+function resolveSpritePath(basePath: string, facing: FacingDir): string {
+  const isFront = facing === 's' || facing === 'e'
+  return basePath.replace(/\.svg$/, `${isFront ? '_front' : '_back'}.svg`)
+}
+
 export class SpriteManager {
   private meshes = new Map<string, Mesh>()
+  private indicators = new Map<string, Mesh>()
   private textureCache = new Map<string, Texture>()
   private ghost: { mesh: Mesh; mat: StandardMaterial; spriteId: string } | null = null
 
@@ -29,11 +43,15 @@ export class SpriteManager {
     return tex
   }
 
-  place(instance: SpriteInstance, spritePath: string): void {
+  place(instance: SpriteInstance, basePath: string): void {
     if (this.meshes.has(instance.instanceId)) return
     const { x, z } = cellToWorld(instance.col, instance.row)
     const isTerrain = instance.spriteId.startsWith('terrain/')
+    const hasDir = instance.spriteId.startsWith('tokens/')
     const h = isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
+
+    const facing: FacingDir = instance.facing ?? 's'
+    const spritePath = hasDir ? resolveSpritePath(basePath, facing) : basePath
 
     const plane = MeshBuilder.CreatePlane(
       `sprite-${instance.instanceId}`,
@@ -51,8 +69,45 @@ export class SpriteManager {
     mat.backFaceCulling = false
     plane.material = mat
 
-    plane.metadata = { instanceId: instance.instanceId, draggable: !isTerrain }
+    plane.metadata = {
+      instanceId: instance.instanceId,
+      draggable: !isTerrain,
+      basePath,
+      hasDirections: hasDir,
+    }
     this.meshes.set(instance.instanceId, plane)
+
+    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
+  }
+
+  private upsertIndicator(instanceId: string, x: number, z: number, facing: FacingDir): void {
+    let ind = this.indicators.get(instanceId)
+    if (!ind) {
+      ind = MeshBuilder.CreateDisc(`dir-${instanceId}`, { radius: 0.22, tessellation: 3 }, this.scene)
+      ind.rotation.x = -Math.PI / 2
+      ind.position = new Vector3(x, 0.02, z)
+      const mat = new StandardMaterial(`dir-mat-${instanceId}`, this.scene)
+      mat.diffuseColor = new Color3(1, 0.85, 0.1)
+      mat.emissiveColor = new Color3(0.6, 0.5, 0)
+      mat.backFaceCulling = false
+      ind.material = mat
+      this.indicators.set(instanceId, ind)
+    }
+    ind.rotation.y = FACING_ANGLE[facing]
+    ind.position.x = x
+    ind.position.z = z
+  }
+
+  setFacing(instanceId: string, facing: FacingDir): void {
+    const mesh = this.meshes.get(instanceId)
+    if (!mesh?.metadata?.hasDirections) return
+    const mat = mesh.material as StandardMaterial
+    const basePath = mesh.metadata.basePath as string
+    const newPath = resolveSpritePath(basePath, facing)
+    const tex = this.getTexture(newPath)
+    tex.hasAlpha = true
+    mat.diffuseTexture = tex
+    this.upsertIndicator(instanceId, mesh.position.x, mesh.position.z, facing)
   }
 
   move(instanceId: string, col: number, row: number): void {
@@ -61,13 +116,15 @@ export class SpriteManager {
     const { x, z } = cellToWorld(col, row)
     mesh.position.x = x
     mesh.position.z = z
+    const ind = this.indicators.get(instanceId)
+    if (ind) { ind.position.x = x; ind.position.z = z }
   }
 
   remove(instanceId: string): void {
-    const mesh = this.meshes.get(instanceId)
-    if (!mesh) return
-    mesh.dispose()
+    this.meshes.get(instanceId)?.dispose()
     this.meshes.delete(instanceId)
+    this.indicators.get(instanceId)?.dispose()
+    this.indicators.delete(instanceId)
   }
 
   setHighlight(instanceId: string, on: boolean): void {
@@ -88,9 +145,11 @@ export class SpriteManager {
 
   showPlacementGhost(spriteId: string, path: string, col: number, row: number): void {
     const { x, z } = cellToWorld(col, row)
+    const isTerrain = spriteId.startsWith('terrain/')
+    const h = isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
     if (this.ghost?.spriteId !== spriteId) {
       this.hidePlacementGhost()
-      const mesh = MeshBuilder.CreatePlane('placement-ghost', { width: CELL_SIZE * 0.9, height: SPRITE_HEIGHT }, this.scene)
+      const mesh = MeshBuilder.CreatePlane('placement-ghost', { width: CELL_SIZE * 0.9, height: h }, this.scene)
       mesh.billboardMode = Mesh.BILLBOARDMODE_Y
       const mat = new StandardMaterial('placement-ghost-mat', this.scene)
       const tex = this.getTexture(path)
@@ -102,7 +161,7 @@ export class SpriteManager {
       mesh.material = mat
       this.ghost = { mesh, mat, spriteId }
     }
-    this.ghost.mesh.position = new Vector3(x, SPRITE_HEIGHT / 2, z)
+    this.ghost.mesh.position = new Vector3(x, h / 2, z)
     this.ghost.mesh.isVisible = true
   }
 
@@ -116,6 +175,8 @@ export class SpriteManager {
   clear(): void {
     for (const mesh of this.meshes.values()) mesh.dispose()
     this.meshes.clear()
+    for (const ind of this.indicators.values()) ind.dispose()
+    this.indicators.clear()
     for (const tex of this.textureCache.values()) tex.dispose()
     this.textureCache.clear()
   }

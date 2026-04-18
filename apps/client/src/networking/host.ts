@@ -93,6 +93,11 @@ export class HostSession {
         if (instance) showEmote(this.scene, instance.col, instance.row, msg.emote)
         break
       }
+      case 'sprite:face': {
+        useRoomStore.getState().faceSprite(msg.instanceId, msg.facing)
+        this.spriteManager.setFacing(msg.instanceId, msg.facing)
+        break
+      }
       case 'sprite:drag': {
         this.spriteManager.move(msg.instanceId, msg.col, msg.row)
         break

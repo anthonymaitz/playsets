@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SpriteInstance } from '../types'
+import type { SpriteInstance, FacingDir } from '../types'
 
 interface RoomStore {
   roomId: string | null
@@ -7,6 +7,7 @@ interface RoomStore {
   setRoomId: (id: string) => void
   placeSprite: (s: SpriteInstance) => void
   moveSprite: (instanceId: string, col: number, row: number) => void
+  faceSprite: (instanceId: string, facing: FacingDir) => void
   removeSprite: (instanceId: string) => void
   loadSnapshot: (sprites: SpriteInstance[]) => void
   reset: () => void
@@ -22,6 +23,13 @@ export const useRoomStore = create<RoomStore>((set) => ({
       if (!state.sprites[instanceId]) return state
       return {
         sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], col, row } },
+      }
+    }),
+  faceSprite: (instanceId, facing) =>
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return {
+        sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], facing } },
       }
     }),
   removeSprite: (instanceId) =>

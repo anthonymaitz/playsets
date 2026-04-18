@@ -4,9 +4,9 @@
       "id": "tokens",
       "label": "Tokens",
       "sprites": [
-        { "id": "tokens/warrior", "label": "Warrior", "path": "/assets/sprites/tokens/warrior.svg" },
-        { "id": "tokens/mage", "label": "Mage", "path": "/assets/sprites/tokens/mage.svg" },
-        { "id": "tokens/rogue", "label": "Rogue", "path": "/assets/sprites/tokens/rogue.svg" }
+        { "id": "tokens/warrior", "label": "Warrior", "path": "/assets/sprites/tokens/warrior.svg", "hasDirections": true },
+        { "id": "tokens/mage", "label": "Mage", "path": "/assets/sprites/tokens/mage.svg", "hasDirections": true },
+        { "id": "tokens/rogue", "label": "Rogue", "path": "/assets/sprites/tokens/rogue.svg", "hasDirections": true }
       ]
     },
     {
