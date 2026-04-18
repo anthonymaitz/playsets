@@ -2,6 +2,7 @@ import {
   Engine,
   Scene,
   ArcRotateCamera,
+  Camera,
   HemisphericLight,
   Vector3,
   Color4,
@@ -31,6 +32,19 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   camera.attachControl(canvas, true)
   camera.panningSensibility = 0
   camera.inertia = 0  // disable built-in inertia; snap animation provides the deceleration
+
+  // True orthographic projection — parallel lines stay parallel, no perspective foreshortening.
+  // Ortho bounds are kept proportional to camera.radius so mouse-wheel zoom still works.
+  camera.mode = Camera.ORTHOGRAPHIC_CAMERA
+  const syncOrtho = () => {
+    const aspect = engine.getRenderHeight() / engine.getRenderWidth()
+    const half = camera.radius * 0.5
+    camera.orthoLeft = -half
+    camera.orthoRight = half
+    camera.orthoTop = half * aspect
+    camera.orthoBottom = -half * aspect
+  }
+  scene.registerBeforeRender(syncOrtho)
 
   const light = new HemisphericLight('light', new Vector3(0, 1, 0), scene)
   light.intensity = 0.9
@@ -76,6 +90,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
       canvas.removeEventListener('pointerup', snapToIsometric)
       canvas.removeEventListener('pointerdown', cancelSnap)
       window.removeEventListener('resize', onResize)
+      scene.unregisterBeforeRender(syncOrtho)
       engine.dispose()
     },
   }
