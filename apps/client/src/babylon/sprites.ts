@@ -12,19 +12,20 @@ import { cellToWorld, CELL_SIZE } from './grid'
 import type { SpriteInstance } from '../types'
 
 const SPRITE_HEIGHT = CELL_SIZE * 1.6
-const textureCache = new Map<string, Texture>()
-
-function getTexture(path: string, scene: Scene): Texture {
-  if (!textureCache.has(path)) {
-    textureCache.set(path, new Texture(path, scene, false, false))
-  }
-  return textureCache.get(path)!
-}
 
 export class SpriteManager {
   private meshes = new Map<string, Mesh>()
+  private textureCache = new Map<string, Texture>()
 
   constructor(private scene: Scene) {}
+
+  private getTexture(path: string): Texture {
+    const cached = this.textureCache.get(path)
+    if (cached) return cached
+    const tex = new Texture(path, this.scene, false, false)
+    this.textureCache.set(path, tex)
+    return tex
+  }
 
   place(instance: SpriteInstance, spritePath: string): void {
     if (this.meshes.has(instance.instanceId)) return
@@ -39,7 +40,7 @@ export class SpriteManager {
     plane.billboardMode = Mesh.BILLBOARDMODE_Y
 
     const mat = new StandardMaterial(`mat-${instance.instanceId}`, this.scene)
-    const tex = getTexture(spritePath, this.scene)
+    const tex = this.getTexture(spritePath)
     tex.hasAlpha = true
     mat.diffuseTexture = tex
     mat.useAlphaFromDiffuseTexture = true
@@ -84,5 +85,7 @@ export class SpriteManager {
   clear(): void {
     for (const mesh of this.meshes.values()) mesh.dispose()
     this.meshes.clear()
+    for (const tex of this.textureCache.values()) tex.dispose()
+    this.textureCache.clear()
   }
 }
