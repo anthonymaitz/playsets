@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client'
 
-const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL ?? 'http://localhost:3001'
+const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL ?? 'http://localhost:9001'
 
 export interface SignalingEvents {
   onGuestJoined: (guestSocketId: string) => void

@@ -7,7 +7,7 @@ function isCallback(fn: unknown): fn is (...args: unknown[]) => void {
 }
 
 const rawPort = parseInt(process.env.PORT ?? '', 10)
-const PORT = Number.isNaN(rawPort) ? 3001 : rawPort
+const PORT = Number.isNaN(rawPort) ? 9001 : rawPort
 const registry = new RoomRegistry()
 const http = createServer()
 const io = new Server(http, {
