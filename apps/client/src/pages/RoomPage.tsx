@@ -582,9 +582,9 @@ function setupDragController(
       if (buildingModeRef.current) return
       sendMsg(sessionRef.current, { type: 'sprite:drag', instanceId, col, row })
     },
+    canDrop: (col, row) => !isWallCell(col, row),
     onDragDrop: (instanceId, col, row) => {
       if (buildingModeRef.current) return
-      if (isWallCell(col, row)) return
       useRoomStore.getState().moveSprite(instanceId, col, row)
       sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)

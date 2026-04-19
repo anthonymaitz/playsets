@@ -16,6 +16,7 @@ export interface DragCallbacks {
   onDragMove: (instanceId: string, col: number, row: number) => void
   onDragDrop: (instanceId: string, col: number, row: number) => void
   onSpriteClick: (instanceId: string) => void
+  canDrop?: (col: number, row: number) => boolean
 }
 
 export class DragController {
@@ -58,7 +59,13 @@ export class DragController {
 
   private onDown(info: PointerInfo): void {
     if ((info.event as PointerEvent).button !== 0) return  // left button only
-    const picked = info.pickInfo?.pickedMesh
+    // Pick sprite meshes specifically — skips wall boxes so tokens behind walls remain grabbable
+    const pickResult = this.scene.pick(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      (mesh) => !!this.spriteManager.getInstanceId(mesh),
+    )
+    const picked = pickResult?.pickedMesh
     if (!picked) return
     const instanceId = this.spriteManager.getInstanceId(picked)
     if (!instanceId) return
@@ -105,13 +112,10 @@ export class DragController {
     } else {
       this.justDropped = true
       const cell = this.pickGroundCell()
-      if (cell) {
-        this.spriteManager.move(instanceId, cell.col, cell.row)
-        this.callbacks.onDragDrop(instanceId, cell.col, cell.row)
-      } else {
-        this.spriteManager.move(instanceId, originalCol, originalRow)
-        this.callbacks.onDragDrop(instanceId, originalCol, originalRow)
-      }
+      const allowed = cell && (!this.callbacks.canDrop || this.callbacks.canDrop(cell.col, cell.row))
+      const dest = allowed ? cell! : { col: originalCol, row: originalRow }
+      this.spriteManager.move(instanceId, dest.col, dest.row)
+      this.callbacks.onDragDrop(instanceId, dest.col, dest.row)
     }
 
     this.spriteManager.setHighlight(instanceId, false)
