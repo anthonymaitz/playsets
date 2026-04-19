@@ -184,17 +184,39 @@ export class BuildingManager {
       const filtered: Record<string, BuildingTile> = {}
       for (const [id, tile] of Object.entries(existingTiles)) {
         const inBounds = tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow
+        if (!inBounds) { filtered[id] = tile; continue }
+
         const onPerimeter = tile.col === minCol || tile.col === maxCol || tile.row === minRow || tile.row === maxRow
         const isCorner = (tile.col === minCol || tile.col === maxCol) && (tile.row === minRow || tile.row === maxRow)
-        if (inBounds && onPerimeter && !isCorner && tile.tileId.includes('wall')) {
-          removedIds.push(id)
-          this.removeTile(id)
-          // Replace with a floor tile so the passage is walkable and the cell stays occupied
-          const passage: BuildingTile = { instanceId: nanoid(), tileId: floorTileId, col: tile.col, row: tile.row }
-          passageTiles.push(passage)
-          filtered[passage.instanceId] = passage  // mark occupied so generateRoomTiles skips it
+
+        if (!onPerimeter) {
+          if (tile.tileId.includes('wall')) {
+            // Interior wall from a previous room now inside Room 2 → remove; Room 2 fills with floor
+            removedIds.push(id)
+            this.removeTile(id)
+          } else {
+            filtered[id] = tile
+          }
+        } else if (isCorner) {
+          if (tile.tileId.includes('wall')) {
+            filtered[id] = tile  // shared outer corner wall — keep
+          } else {
+            // Floor at Room 2's corner: remove so Room 2 can place its corner wall
+            removedIds.push(id)
+            this.removeTile(id)
+          }
         } else {
-          filtered[id] = tile
+          // Non-corner perimeter cell
+          if (tile.tileId.includes('wall')) {
+            // Shared lateral wall → open passage
+            removedIds.push(id)
+            this.removeTile(id)
+            const passage: BuildingTile = { instanceId: nanoid(), tileId: floorTileId, col: tile.col, row: tile.row }
+            passageTiles.push(passage)
+            filtered[passage.instanceId] = passage
+          } else {
+            filtered[id] = tile
+          }
         }
       }
       effectiveTiles = filtered
