@@ -43,8 +43,8 @@ export class BuildingManager {
     const pos = cellToWorld(col, row)
     let mesh: Mesh
     if (isWall) {
-      mesh = MeshBuilder.CreateBox(`btile-${id}`, { width: CELL_SIZE, height: 0.4, depth: CELL_SIZE }, this.scene)
-      mesh.position.set(pos.x, 0.2, pos.z)
+      mesh = MeshBuilder.CreateBox(`btile-${id}`, { width: CELL_SIZE, height: 1.6, depth: CELL_SIZE }, this.scene)
+      mesh.position.set(pos.x, 0.8, pos.z)
     } else {
       mesh = MeshBuilder.CreatePlane(`btile-${id}`, { size: CELL_SIZE }, this.scene)
       mesh.rotation.x = Math.PI / 2
