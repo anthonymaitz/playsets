@@ -131,29 +131,31 @@ export class SpriteManager {
     this.meshes.set(instance.instanceId, plane)
     if (this.shadowGen) this.shadowGen.addShadowCaster(plane)
 
-    if (!isTerrain) {
-      const sp = MeshBuilder.CreatePlane(`shadow-${instance.instanceId}`, {
-        width: CELL_SIZE * 0.9,
-        height: SHADOW_LENGTH,
-      }, this.scene)
-      sp.rotation.x = SHADOW_ROT_X
-      sp.rotation.y = SHADOW_ROT_Y
-      sp.position = new Vector3(x + SHADOW_OFFSET_X, 0.01, z + SHADOW_OFFSET_Z)
-      const sm = new StandardMaterial(`shadow-mat-${instance.instanceId}`, this.scene)
-      sm.diffuseTexture = this.getTexture(spritePath)
-      sm.useAlphaFromDiffuseTexture = true
-      sm.diffuseColor = Color3.Black()
-      sm.emissiveColor = Color3.Black()
-      sm.specularColor = Color3.Black()
-      sm.alpha = 0.55
-      sm.backFaceCulling = false
-      sp.material = sm
-      sp.isPickable = false
-      sp.isVisible = this.shadowsEnabled
-      this.tokenShadows.set(instance.instanceId, sp)
-    }
+    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath)
 
     if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
+  }
+
+  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string): void {
+    const sp = MeshBuilder.CreatePlane(`shadow-${instanceId}`, {
+      width: CELL_SIZE * 0.9,
+      height: SHADOW_LENGTH,
+    }, this.scene)
+    sp.rotation.x = SHADOW_ROT_X
+    sp.rotation.y = SHADOW_ROT_Y
+    sp.position = new Vector3(x + SHADOW_OFFSET_X, 0.01, z + SHADOW_OFFSET_Z)
+    const sm = new StandardMaterial(`shadow-mat-${instanceId}`, this.scene)
+    sm.diffuseTexture = this.getTexture(spritePath)
+    sm.useAlphaFromDiffuseTexture = true
+    sm.diffuseColor = Color3.Black()
+    sm.emissiveColor = Color3.Black()
+    sm.specularColor = Color3.Black()
+    sm.alpha = 0.55
+    sm.backFaceCulling = false
+    sp.material = sm
+    sp.isPickable = false
+    sp.isVisible = this.shadowsEnabled
+    this.tokenShadows.set(instanceId, sp)
   }
 
   private upsertIndicator(instanceId: string, x: number, z: number, facing: FacingDir): void {

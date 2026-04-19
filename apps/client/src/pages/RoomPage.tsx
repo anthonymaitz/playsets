@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { PointerEventTypes } from '@babylonjs/core'
-import type { Scene } from '@babylonjs/core'
+import type { Scene, ArcRotateCamera } from '@babylonjs/core'
 import { createScene } from '../babylon/scene'
 import { createGrid, setGridBackground, worldToCell } from '../babylon/grid'
 import { SpriteManager } from '../babylon/sprites'
@@ -27,6 +27,13 @@ interface TokenMenuState {
   instanceId: string
   x: number
   y: number
+}
+
+type SessionMsg = Parameters<HostSession['localAction']>[0]
+
+function sendMsg(session: HostSession | GuestSession | null, msg: SessionMsg): void {
+  if (session instanceof HostSession) session.localAction(msg)
+  else session?.send(msg)
 }
 
 export function RoomPage() {
@@ -91,7 +98,7 @@ export function RoomPage() {
   useEffect(() => {
     if (needsName || !canvasRef.current) return
 
-    bgCleanupRef.current = () => {}  // reset for this scene lifecycle
+    bgCleanupRef.current = () => {}
     const { engine, scene, camera, ambientLight } = createScene(canvasRef.current)
     sceneRef.current = scene
     const ground = createGrid(scene)
@@ -121,58 +128,10 @@ export function RoomPage() {
       setDirectionPicker({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
     }
 
-    const dragController = new DragController(scene, spriteManager, camera, {
-      onDragMove: (instanceId, col, row) => {
-        const msg = { type: 'sprite:drag' as const, instanceId, col, row }
-        if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
-        else (sessionRef.current as GuestSession | null)?.send(msg)
-      },
-      onDragDrop: (instanceId, col, row) => {
-        const msg = { type: 'sprite:move' as const, instanceId, col, row }
-        useRoomStore.getState().moveSprite(instanceId, col, row)
-        if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
-        else (sessionRef.current as GuestSession | null)?.send(msg)
-        if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
-      },
-      onSpriteClick: (instanceId) => {
-        const rect = canvasRef.current?.getBoundingClientRect()
-        const sx = (rect?.left ?? 0) + scene.pointerX
-        const sy = (rect?.top ?? 0) + scene.pointerY
-        setTokenMenu({ instanceId, x: sx, y: sy })
-        if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
-      },
-    })
+    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu)
     dragControllerRef.current = dragController
 
-    scene.onPointerObservable.add((info) => {
-      if (info.type === PointerEventTypes.POINTERDOWN) {
-        setDirectionPicker(null)
-        setTokenMenu(null)
-      }
-
-      if (info.type !== PointerEventTypes.POINTERMOVE) return
-
-      const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
-
-      const sprite = selectedSpriteRef.current
-      if (sprite && !dragController.isDragging()) {
-        if (pick?.hit && pick.pickedPoint) {
-          const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-          spriteManager.showPlacementGhost(sprite.id, sprite.path, col, row)
-        } else {
-          spriteManager.hidePlacementGhost()
-        }
-      } else if (!sprite) {
-        spriteManager.hidePlacementGhost()
-      }
-
-      if (pick?.hit && pick.pickedPoint) {
-        const { playerId } = usePlayersStore.getState().localPlayer
-        const msg = { type: 'cursor:move' as const, playerId, worldX: pick.pickedPoint.x, worldZ: pick.pickedPoint.z }
-        if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
-        else (sessionRef.current as GuestSession | null)?.send(msg)
-      }
-    })
+    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker)
 
     const handlePointerUp = (e: PointerEvent) => {
       if (dragController.consumeJustDropped()) return
@@ -187,11 +146,9 @@ export function RoomPage() {
       const newInstanceId = nanoid()
       const { localPlayer: lp } = usePlayersStore.getState()
       const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId }
-      const msg = { type: 'sprite:place' as const, ...instance }
       useRoomStore.getState().placeSprite(instance)
       spriteManager.place(instance, sprite.path)
-      if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
-      else (sessionRef.current as GuestSession | null)?.send(msg)
+      sendMsg(sessionRef.current, { type: 'sprite:place', ...instance })
       setSelectedSprite(null)
       selectedSpriteRef.current = null
       spriteManager.hidePlacementGhost()
@@ -225,21 +182,7 @@ export function RoomPage() {
     document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
 
-    if (isHost) {
-      sessionRef.current = new HostSession(scene, spriteManager, cursorManager, (newRoomId) => {
-        window.history.replaceState(null, '', `/room/${newRoomId}`)
-        useRoomStore.getState().setRoomId(newRoomId)
-      })
-    } else if (roomId && roomId !== 'new') {
-      sessionRef.current = new GuestSession(
-        roomId,
-        scene,
-        spriteManager,
-        cursorManager,
-        () => setConnected(true),
-        () => alert('Host disconnected'),
-      )
-    }
+    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, cursorManager, setConnected)
 
     return () => {
       canvas.removeEventListener('pointerup', handlePointerUp)
@@ -259,10 +202,7 @@ export function RoomPage() {
     }
   }, [needsName, roomId, isHost])
 
-  const dispatchMsg = (msg: Parameters<HostSession['localAction']>[0]) => {
-    if (sessionRef.current instanceof HostSession) sessionRef.current.localAction(msg)
-    else (sessionRef.current as GuestSession | null)?.send(msg)
-  }
+  const dispatchMsg = (msg: SessionMsg) => sendMsg(sessionRef.current, msg)
 
   if (needsName) return <JoinDialog onDone={() => setNeedsName(false)} />
 
@@ -339,4 +279,97 @@ export function RoomPage() {
       )}
     </>
   )
+}
+
+function setupDragController(
+  scene: Scene,
+  spriteManager: SpriteManager,
+  camera: ArcRotateCamera,
+  sessionRef: React.MutableRefObject<HostSession | GuestSession | null>,
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  showDirPickerAtPointer: (instanceId: string) => void,
+  setTokenMenu: (m: TokenMenuState | null) => void,
+): DragController {
+  return new DragController(scene, spriteManager, camera, {
+    onDragMove: (instanceId, col, row) => {
+      sendMsg(sessionRef.current, { type: 'sprite:drag', instanceId, col, row })
+    },
+    onDragDrop: (instanceId, col, row) => {
+      useRoomStore.getState().moveSprite(instanceId, col, row)
+      sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
+      if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
+    },
+    onSpriteClick: (instanceId) => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      const sx = (rect?.left ?? 0) + scene.pointerX
+      const sy = (rect?.top ?? 0) + scene.pointerY
+      setTokenMenu({ instanceId, x: sx, y: sy })
+      if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
+    },
+  })
+}
+
+function setupScenePointerObservable(
+  scene: Scene,
+  spriteManager: SpriteManager,
+  dragController: DragController,
+  selectedSpriteRef: React.MutableRefObject<SpriteManifestEntry | null>,
+  sessionRef: React.MutableRefObject<HostSession | GuestSession | null>,
+  setTokenMenu: (m: TokenMenuState | null) => void,
+  setDirectionPicker: (d: { instanceId: string; x: number; y: number } | null) => void,
+): void {
+  scene.onPointerObservable.add((info) => {
+    if (info.type === PointerEventTypes.POINTERDOWN) {
+      setDirectionPicker(null)
+      setTokenMenu(null)
+    }
+
+    if (info.type !== PointerEventTypes.POINTERMOVE) return
+
+    const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+
+    const sprite = selectedSpriteRef.current
+    if (sprite && !dragController.isDragging()) {
+      if (pick?.hit && pick.pickedPoint) {
+        const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+        spriteManager.showPlacementGhost(sprite.id, sprite.path, col, row)
+      } else {
+        spriteManager.hidePlacementGhost()
+      }
+    } else if (!sprite) {
+      spriteManager.hidePlacementGhost()
+    }
+
+    if (pick?.hit && pick.pickedPoint) {
+      const { playerId } = usePlayersStore.getState().localPlayer
+      sendMsg(sessionRef.current, { type: 'cursor:move', playerId, worldX: pick.pickedPoint.x, worldZ: pick.pickedPoint.z })
+    }
+  })
+}
+
+function createSession(
+  isHost: boolean,
+  roomId: string | undefined,
+  scene: Scene,
+  spriteManager: SpriteManager,
+  cursorManager: CursorManager,
+  setConnected: (v: boolean) => void,
+): HostSession | GuestSession | null {
+  if (isHost) {
+    return new HostSession(scene, spriteManager, cursorManager, (newRoomId) => {
+      window.history.replaceState(null, '', `/room/${newRoomId}`)
+      useRoomStore.getState().setRoomId(newRoomId)
+    })
+  }
+  if (roomId && roomId !== 'new') {
+    return new GuestSession(
+      roomId,
+      scene,
+      spriteManager,
+      cursorManager,
+      () => setConnected(true),
+      () => alert('Host disconnected'),
+    )
+  }
+  return null
 }
