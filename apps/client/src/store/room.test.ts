@@ -64,6 +64,7 @@ describe('useRoomStore — building tiles', () => {
     ])
     expect(useRoomStore.getState().buildingTiles['old']).toBeUndefined()
     expect(useRoomStore.getState().buildingTiles['new1']).toBeDefined()
+    expect(Object.keys(useRoomStore.getState().buildingTiles)).toHaveLength(1)
   })
 
   it('reset clears buildingTiles', () => {
