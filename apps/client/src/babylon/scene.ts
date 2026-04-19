@@ -16,33 +16,39 @@ export interface SceneContext {
   engine: Engine
   scene: Scene
   camera: ArcRotateCamera
+  ambientLight: HemisphericLight
   dispose: () => void
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true })
   const scene = new Scene(engine)
-  scene.clearColor = new Color4(0.12, 0.12, 0.16, 1)
+  scene.clearColor = new Color4(0.22, 0.24, 0.32, 1)
 
   const camera = new ArcRotateCamera('camera', -Math.PI / 4, Math.PI / 3.5, 24, Vector3.Zero(), scene)
   camera.lowerBetaLimit = Math.PI / 3.5
   camera.upperBetaLimit = Math.PI / 3.5
   camera.lowerRadiusLimit = 8
   camera.upperRadiusLimit = 80
-  camera.attachControl(canvas, true)
-  camera.panningSensibility = 0
-  camera.inertia = 0  // disable built-in inertia; snap animation provides the deceleration
+  // attachControl(noPreventDefault, useCtrlForPanning, panningMouseButton)
+  // panningMouseButton=0 → left click pans, right click rotates
+  camera.attachControl(true, false, 0)
+  camera.inertia = 0
+  camera.panningInertia = 0
+  camera.angularSensibilityX = 400
 
-  // True orthographic projection — parallel lines stay parallel, no perspective foreshortening.
-  // Ortho bounds are kept proportional to camera.radius so mouse-wheel zoom still works.
+  // Orthographic projection with ortho bounds tied to camera.radius so scroll-zoom works.
   camera.mode = Camera.ORTHOGRAPHIC_CAMERA
   const syncOrtho = () => {
-    const aspect = engine.getRenderHeight() / engine.getRenderWidth()
+    const w = engine.getRenderWidth()
+    const aspect = engine.getRenderHeight() / w
     const half = camera.radius * 0.5
     camera.orthoLeft = -half
     camera.orthoRight = half
     camera.orthoTop = half * aspect
     camera.orthoBottom = -half * aspect
+    // 1 screen-pixel drag = 1 screen-pixel of world movement at any zoom level
+    camera.panningSensibility = w / camera.radius
   }
   scene.registerBeforeRender(syncOrtho)
 
@@ -53,21 +59,20 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 
   engine.runRenderLoop(() => scene.render())
 
-  // Snap camera alpha to the nearest isometric orientation (multiples of π/2)
-  // when the user releases after rotating.
+  // Snap alpha to nearest isometric corner-forward orientation after rotating.
   const SNAP = Math.PI / 2
+  const OFFSET = Math.PI / 4
   const ease = new QuarticEase()
   ease.setEasingMode(EasingFunction.EASINGMODE_EASEOUT)
 
   const snapToIsometric = () => {
     const current = camera.alpha
-    const OFFSET = Math.PI / 4  // corners face viewer, not flat edges
     const target = Math.round((current - OFFSET) / SNAP) * SNAP + OFFSET
     if (Math.abs(current - target) < 0.001) return
     scene.stopAnimation(camera)
     Animation.CreateAndStartAnimation(
       'cam-snap', camera, 'alpha',
-      60, 36,  // 36 frames at 60 fps = 600 ms
+      60, 36,
       current, target,
       Animation.ANIMATIONLOOPMODE_CONSTANT,
       ease,
@@ -76,8 +81,66 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 
   const cancelSnap = () => scene.stopAnimation(camera)
 
-  canvas.addEventListener('pointerup', snapToIsometric)
-  canvas.addEventListener('pointerdown', cancelSnap)
+  // Only snap after right-click release (rotation gesture), not after left-click (pan)
+  const onPointerUp = (e: PointerEvent) => { if (e.button === 2) snapToIsometric() }
+  const onPointerDown = () => cancelSnap()
+
+  canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('pointerdown', onPointerDown)
+
+  // Two-finger touch: horizontal swipe rotates, pinch zooms.
+  // We intercept and prevent BabylonJS pointer events for 2-finger gestures.
+  let prevMidX = 0
+  let prevPinchDist = 0
+  let twoFingerActive = false
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      twoFingerActive = true
+      cancelSnap()
+      prevMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      prevPinchDist = Math.sqrt(dx * dx + dy * dy)
+    } else {
+      twoFingerActive = false
+    }
+  }
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (e.touches.length !== 2 || !twoFingerActive) return
+    e.preventDefault()
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+    const dx = e.touches[0].clientX - e.touches[1].clientX
+    const dy = e.touches[0].clientY - e.touches[1].clientY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    // Horizontal midpoint movement → rotate (change alpha)
+    camera.alpha -= (midX - prevMidX) * 0.01
+
+    // Pinch spread/contract → zoom
+    if (prevPinchDist > 0) {
+      camera.radius = Math.max(
+        camera.lowerRadiusLimit!,
+        Math.min(camera.upperRadiusLimit!, camera.radius * (prevPinchDist / dist)),
+      )
+    }
+
+    prevMidX = midX
+    prevPinchDist = dist
+  }
+
+  const onTouchEnd = (e: TouchEvent) => {
+    if (e.touches.length < 2 && twoFingerActive) {
+      twoFingerActive = false
+      snapToIsometric()
+    }
+  }
+
+  canvas.addEventListener('touchstart', onTouchStart, { passive: false })
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false })
+  canvas.addEventListener('touchend', onTouchEnd)
 
   const onResize = () => engine.resize()
   window.addEventListener('resize', onResize)
@@ -86,9 +149,13 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     engine,
     scene,
     camera,
+    ambientLight: light,
     dispose: () => {
-      canvas.removeEventListener('pointerup', snapToIsometric)
-      canvas.removeEventListener('pointerdown', cancelSnap)
+      canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('touchstart', onTouchStart)
+      canvas.removeEventListener('touchmove', onTouchMove)
+      canvas.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('resize', onResize)
       scene.unregisterBeforeRender(syncOrtho)
       engine.dispose()

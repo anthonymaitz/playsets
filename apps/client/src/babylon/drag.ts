@@ -10,7 +10,7 @@ import {
 } from '@babylonjs/core'
 import type { PointerInfo, ArcRotateCamera } from '@babylonjs/core'
 import { SpriteManager } from './sprites'
-import { worldToCell, cellToWorld, GRID_COLS, GRID_ROWS } from './grid'
+import { worldToCell, cellToWorld } from './grid'
 
 export interface DragCallbacks {
   onDragMove: (instanceId: string, col: number, row: number) => void
@@ -29,6 +29,7 @@ export class DragController {
   private justDropped = false
   private observer: Observer<PointerInfo> | null = null
   private onBlur = (): void => { this.onUp() }
+  private onWindowPointerUp = (): void => { this.onUp() }
 
   isDragging(): boolean { return this.dragging !== null }
 
@@ -43,6 +44,7 @@ export class DragController {
     private spriteManager: SpriteManager,
     private camera: ArcRotateCamera,
     private callbacks: DragCallbacks,
+    private reattachCamera: () => void = () => camera.attachControl(true, false, 0),
   ) {
     this.observer = this.scene.onPointerObservable.add((info) => {
       if (info.type === PointerEventTypes.POINTERDOWN) this.onDown(info)
@@ -50,9 +52,12 @@ export class DragController {
       if (info.type === PointerEventTypes.POINTERUP) this.onUp()
     })
     window.addEventListener('blur', this.onBlur)
+    // Catch pointer-up outside the canvas so drags always terminate cleanly
+    window.addEventListener('pointerup', this.onWindowPointerUp)
   }
 
   private onDown(info: PointerInfo): void {
+    if ((info.event as PointerEvent).button !== 0) return  // left button only
     const picked = info.pickInfo?.pickedMesh
     if (!picked) return
     const instanceId = this.spriteManager.getInstanceId(picked)
@@ -93,7 +98,7 @@ export class DragController {
     if (!this.dragging) return
     const { instanceId, originalCol, originalRow } = this.dragging
 
-    this.camera.attachControl()
+    this.reattachCamera()
 
     if (!this.hasMoved) {
       this.callbacks.onSpriteClick(instanceId)
@@ -122,13 +127,12 @@ export class DragController {
       (mesh) => mesh.name === 'ground',
     )
     if (!pick?.hit || !pick.pickedPoint) return null
-    const cell = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-    if (cell.col < 0 || cell.col >= GRID_COLS || cell.row < 0 || cell.row >= GRID_ROWS) return null
-    return cell
+    return worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
   }
 
   dispose(): void {
     window.removeEventListener('blur', this.onBlur)
+    window.removeEventListener('pointerup', this.onWindowPointerUp)
     this.scene.onPointerObservable.remove(this.observer)
     this.observer = null
     this.ghost?.dispose()

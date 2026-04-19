@@ -98,6 +98,25 @@ export class HostSession {
         this.spriteManager.setFacing(msg.instanceId, msg.facing)
         break
       }
+      case 'sprite:status': {
+        useRoomStore.getState().setStatuses(msg.instanceId, msg.statuses)
+        this.spriteManager.setStatuses(msg.instanceId, msg.statuses)
+        break
+      }
+      case 'sprite:speech': {
+        useRoomStore.getState().setSpeech(msg.instanceId, msg.speech)
+        break
+      }
+      case 'sprite:animate': {
+        useRoomStore.getState().setAnimation(msg.instanceId, msg.animation)
+        this.spriteManager.setAnimation(msg.instanceId, msg.animation)
+        break
+      }
+      case 'sprite:hide': {
+        useRoomStore.getState().setHidden(msg.instanceId, msg.hidden)
+        this.spriteManager.setHidden(msg.instanceId, msg.hidden)
+        break
+      }
       case 'sprite:drag': {
         this.spriteManager.move(msg.instanceId, msg.col, msg.row)
         break

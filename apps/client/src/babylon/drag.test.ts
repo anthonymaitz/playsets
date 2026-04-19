@@ -55,7 +55,7 @@ vi.mock('./grid', () => ({
 // Helpers to build mocks
 // ---------------------------------------------------------------------------
 
-type PointerHandler = (info: { type: number; pickInfo?: { pickedMesh?: object } }) => void
+type PointerHandler = (info: { type: number; pickInfo?: { pickedMesh?: object }; event?: { button: number } }) => void
 
 type PickResult = { hit: boolean; pickedPoint: { x: number; z: number } | null } | null
 
@@ -73,8 +73,8 @@ function makeScene(pickResult: PickResult) {
     pointerX: 0,
     pointerY: 0,
     pick: vi.fn((): PickResult => pickResult),
-    _fireEvent(type: number, pickedMesh?: object) {
-      handler?.({ type, pickInfo: { pickedMesh } })
+    _fireEvent(type: number, pickedMesh?: object, button = 0) {
+      handler?.({ type, pickInfo: { pickedMesh }, event: { button } })
     },
     _mockObserver: mockObserver,
   }

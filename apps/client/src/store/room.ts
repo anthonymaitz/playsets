@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SpriteInstance, FacingDir } from '../types'
+import type { SpriteInstance, FacingDir, AnimationName } from '../types'
 
 interface RoomStore {
   roomId: string | null
@@ -8,6 +8,10 @@ interface RoomStore {
   placeSprite: (s: SpriteInstance) => void
   moveSprite: (instanceId: string, col: number, row: number) => void
   faceSprite: (instanceId: string, facing: FacingDir) => void
+  setStatuses: (instanceId: string, statuses: string[]) => void
+  setSpeech: (instanceId: string, speech: string) => void
+  setAnimation: (instanceId: string, animation: AnimationName) => void
+  setHidden: (instanceId: string, hidden: boolean) => void
   removeSprite: (instanceId: string) => void
   loadSnapshot: (sprites: SpriteInstance[]) => void
   reset: () => void
@@ -28,9 +32,27 @@ export const useRoomStore = create<RoomStore>((set) => ({
   faceSprite: (instanceId, facing) =>
     set((state) => {
       if (!state.sprites[instanceId]) return state
-      return {
-        sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], facing } },
-      }
+      return { sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], facing } } }
+    }),
+  setStatuses: (instanceId, statuses) =>
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return { sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], statuses } } }
+    }),
+  setSpeech: (instanceId, speech) =>
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return { sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], speech } } }
+    }),
+  setAnimation: (instanceId, animation) =>
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return { sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], animation } } }
+    }),
+  setHidden: (instanceId, hidden) =>
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return { sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], hidden } } }
     }),
   removeSprite: (instanceId) =>
     set((state) => {

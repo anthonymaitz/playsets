@@ -72,6 +72,9 @@ export class GuestSession {
         this.spriteManager.clear()
         for (const s of msg.sprites) {
           this.spriteManager.place(s, `/assets/sprites/${s.spriteId}.svg`)
+          if (s.animation) this.spriteManager.setAnimation(s.instanceId, s.animation)
+          if (s.hidden) this.spriteManager.setHidden(s.instanceId, true)
+          if (s.statuses?.length) this.spriteManager.setStatuses(s.instanceId, s.statuses)
         }
         break
       }
@@ -98,6 +101,25 @@ export class GuestSession {
       case 'sprite:face': {
         useRoomStore.getState().faceSprite(msg.instanceId, msg.facing)
         this.spriteManager.setFacing(msg.instanceId, msg.facing)
+        break
+      }
+      case 'sprite:status': {
+        useRoomStore.getState().setStatuses(msg.instanceId, msg.statuses)
+        this.spriteManager.setStatuses(msg.instanceId, msg.statuses)
+        break
+      }
+      case 'sprite:speech': {
+        useRoomStore.getState().setSpeech(msg.instanceId, msg.speech)
+        break
+      }
+      case 'sprite:animate': {
+        useRoomStore.getState().setAnimation(msg.instanceId, msg.animation)
+        this.spriteManager.setAnimation(msg.instanceId, msg.animation)
+        break
+      }
+      case 'sprite:hide': {
+        useRoomStore.getState().setHidden(msg.instanceId, msg.hidden)
+        this.spriteManager.setHidden(msg.instanceId, msg.hidden)
         break
       }
       case 'sprite:drag': {

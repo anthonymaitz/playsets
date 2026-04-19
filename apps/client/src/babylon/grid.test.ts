@@ -1,25 +1,27 @@
 import { describe, it, expect } from 'vitest'
-import { cellToWorld, worldToCell, GRID_COLS, GRID_ROWS, CELL_SIZE } from './grid'
+import { cellToWorld, worldToCell, CELL_SIZE } from './grid'
 
 describe('cellToWorld', () => {
-  it('cell (0,0) maps to top-left corner center', () => {
+  it('cell (0,0) center is at world (0.5, 0.5)', () => {
     const { x, z } = cellToWorld(0, 0)
-    const halfW = (GRID_COLS * CELL_SIZE) / 2
-    const halfH = (GRID_ROWS * CELL_SIZE) / 2
-    expect(x).toBeCloseTo(-halfW + CELL_SIZE / 2)
-    expect(z).toBeCloseTo(-halfH + CELL_SIZE / 2)
+    expect(x).toBeCloseTo(CELL_SIZE / 2)
+    expect(z).toBeCloseTo(CELL_SIZE / 2)
   })
 
-  it('cell (GRID_COLS-1, GRID_ROWS-1) maps to bottom-right corner center', () => {
-    const { x, z } = cellToWorld(GRID_COLS - 1, GRID_ROWS - 1)
-    const halfW = (GRID_COLS * CELL_SIZE) / 2
-    const halfH = (GRID_ROWS * CELL_SIZE) / 2
-    expect(x).toBeCloseTo(halfW - CELL_SIZE / 2)
-    expect(z).toBeCloseTo(halfH - CELL_SIZE / 2)
+  it('cell (5, 3) center is at world (5.5, 3.5)', () => {
+    const { x, z } = cellToWorld(5, 3)
+    expect(x).toBeCloseTo(5.5)
+    expect(z).toBeCloseTo(3.5)
   })
 
-  it('cellToWorld and worldToCell are inverses for interior cells', () => {
-    for (const [col, row] of [[3, 7], [10, 0], [0, 15], [19, 19]] as const) {
+  it('negative cells work correctly', () => {
+    const { x, z } = cellToWorld(-1, -1)
+    expect(x).toBeCloseTo(-0.5)
+    expect(z).toBeCloseTo(-0.5)
+  })
+
+  it('cellToWorld and worldToCell are inverses', () => {
+    for (const [col, row] of [[-5, -3], [0, 0], [3, 7], [10, 0], [100, 200]] as const) {
       const world = cellToWorld(col, row)
       const cell = worldToCell(world.x, world.z)
       expect(cell.col).toBe(col)
@@ -29,10 +31,15 @@ describe('cellToWorld', () => {
 })
 
 describe('worldToCell', () => {
-  it('clamps out-of-bounds world coords to grid edges', () => {
-    const { col } = worldToCell(-9999, 0)
-    expect(col).toBe(0)
-    const { row } = worldToCell(0, 9999)
-    expect(row).toBe(GRID_ROWS - 1)
+  it('maps world coordinates to the containing cell', () => {
+    expect(worldToCell(0.5, 0.5).col).toBe(0)
+    expect(worldToCell(1.0, 1.0).col).toBe(1)
+    expect(worldToCell(-0.1, -0.1).col).toBe(-1)
+  })
+
+  it('supports arbitrary large coordinates', () => {
+    const { col, row } = worldToCell(9999.5, -8888.5)
+    expect(col).toBe(9999)
+    expect(row).toBe(-8889)
   })
 })

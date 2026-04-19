@@ -1,13 +1,32 @@
 import { useEffect, useState } from 'react'
-import type { SpriteCategory, SpriteManifest, SpriteManifestEntry } from '../types'
+import type { BackgroundType, SpriteCategory, SpriteManifest, SpriteManifestEntry, WeatherType } from '../types'
 
 interface Props {
   selectedSpriteId: string | null
   onSelect: (sprite: SpriteManifestEntry) => void
   onDeselect: () => void
+  activeWeather: WeatherType
+  onWeatherChange: (w: WeatherType) => void
+  activeBackground: BackgroundType
+  onBackgroundChange: (b: BackgroundType) => void
 }
 
-export function SpritePicker({ selectedSpriteId, onSelect, onDeselect }: Props) {
+const WEATHERS: { id: WeatherType; label: string }[] = [
+  { id: 'sunny',  label: '☀️ Sunny'  },
+  { id: 'cloudy', label: '⛅ Clouds' },
+  { id: 'night',  label: '🌙 Night'  },
+  { id: 'rain',   label: '🌧️ Rain'   },
+]
+
+const BACKGROUNDS: { id: BackgroundType; label: string }[] = [
+  { id: 'grass', label: '🌿 Grass' },
+  { id: 'stars', label: '✨ Stars' },
+  { id: 'ocean', label: '🌊 Ocean' },
+  { id: 'snow',  label: '❄️ Snow'  },
+  { id: 'lava',  label: '🔥 Lava'  },
+]
+
+export function SpritePicker({ selectedSpriteId, onSelect, onDeselect, activeWeather, onWeatherChange, activeBackground, onBackgroundChange }: Props) {
   const [manifest, setManifest] = useState<SpriteManifest | null>(null)
   const [fetchError, setFetchError] = useState(false)
   const [search, setSearch] = useState('')
@@ -42,6 +61,52 @@ export function SpritePicker({ selectedSpriteId, onSelect, onDeselect }: Props) 
       background: '#1a1a22', borderRight: '1px solid #333',
       overflowY: 'auto', padding: 8, zIndex: 40,
     }}>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 4px', marginBottom: 5 }}>
+          Weather
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+          {WEATHERS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => onWeatherChange(id)}
+              style={{
+                padding: '5px 4px',
+                fontSize: 11,
+                fontWeight: 600,
+                background: activeWeather === id ? 'rgba(255,210,50,0.18)' : 'rgba(255,255,255,0.04)',
+                border: activeWeather === id ? '1px solid rgba(255,210,50,0.6)' : '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 4,
+                color: activeWeather === id ? '#ffe033' : '#bbb',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 4px', marginBottom: 5 }}>
+          Background
+        </div>
+        <select
+          value={activeBackground}
+          onChange={(e) => onBackgroundChange(e.target.value as BackgroundType)}
+          style={{
+            width: '100%', padding: '5px 8px',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 4, color: '#bbb',
+            fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          {BACKGROUNDS.map(({ id, label }) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
+      </div>
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -73,6 +138,7 @@ export function SpritePicker({ selectedSpriteId, onSelect, onDeselect }: Props) 
                 if (selectedSpriteId === sprite.id) onDeselect()
                 else onSelect(sprite)
               }}
+              onDragStart={(e) => e.preventDefault()}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 width: '100%', padding: '6px 8px 6px 20px',
@@ -81,9 +147,10 @@ export function SpritePicker({ selectedSpriteId, onSelect, onDeselect }: Props) 
                 color: '#ddd', fontSize: 13,
                 cursor: selectedSpriteId === sprite.id ? 'crosshair' : 'grab',
                 borderRadius: 4, textAlign: 'left',
+                userSelect: 'none',
               }}
             >
-              <img src={sprite.path} alt={sprite.label} style={{ width: 28, height: 28, objectFit: 'contain' }} />
+              <img src={sprite.path} alt={sprite.label} draggable={false} style={{ width: 28, height: 28, objectFit: 'contain', pointerEvents: 'none' }} />
               {sprite.label}
             </button>
           ))}
