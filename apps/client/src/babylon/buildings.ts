@@ -50,7 +50,7 @@ export class BuildingManager {
       mesh.rotation.x = Math.PI / 2
       mesh.position.set(pos.x, TILE_Y, pos.z)
     }
-    mesh.renderingGroupId = 0
+    mesh.renderingGroupId = isWall ? 1 : 0
     const mat = new StandardMaterial(`bmat-${id}`, this.scene)
     const tex = this.getOrLoadTexture(path)
     mat.diffuseTexture = tex
