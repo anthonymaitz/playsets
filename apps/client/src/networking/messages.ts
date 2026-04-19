@@ -1,4 +1,4 @@
-import type { GameMessage, SpriteInstance, Player } from '../types'
+import type { GameMessage, SpriteInstance, Player, BuildingTile } from '../types'
 import type { PeerConnection } from './peer'
 
 type PeerMap = Map<string, PeerConnection>
@@ -13,4 +13,8 @@ export function broadcastLossy(peers: PeerMap, msg: GameMessage): void {
 
 export function sendSnapshot(peer: PeerConnection, sprites: SpriteInstance[], players: Player[]): void {
   peer.sendReliable({ type: 'state:snapshot', sprites, players })
+}
+
+export function sendBuildingSnapshot(peer: PeerConnection, tiles: BuildingTile[]): void {
+  peer.sendReliable({ type: 'building:snapshot', tiles })
 }

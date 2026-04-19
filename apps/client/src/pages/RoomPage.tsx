@@ -242,7 +242,7 @@ export function RoomPage() {
     document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
 
-    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, cursorManager, setConnected)
+    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, cursorManager, setConnected)
 
     return () => {
       canvas.removeEventListener('pointerup', handlePointerUp)
@@ -350,12 +350,13 @@ export function RoomPage() {
   const handlePlaceRoom = () => {
     const bm = buildingManagerRef.current
     const end = previewEndRef.current
-    if (!bm || !end) return
+    const session = sessionRef.current
+    if (!bm || !end || !(session instanceof HostSession)) return
     const { buildingTiles } = useRoomStore.getState()
     const tiles = bm.commitPreview(end.col, end.row, wallTileId, floorTileId, buildingTiles, mergeMode)
     for (const tile of tiles) {
       useRoomStore.getState().placeTile(tile)
-      sendMsg(sessionRef.current, { type: 'building:place', tile })
+      session.localAction({ type: 'building:place', tile })
     }
     previewEndRef.current = null
     setScreenCorners(null)
@@ -566,11 +567,12 @@ function createSession(
   roomId: string | undefined,
   scene: Scene,
   spriteManager: SpriteManager,
+  buildingManager: BuildingManager,
   cursorManager: CursorManager,
   setConnected: (v: boolean) => void,
 ): HostSession | GuestSession | null {
   if (isHost) {
-    return new HostSession(scene, spriteManager, cursorManager, (newRoomId) => {
+    return new HostSession(scene, spriteManager, buildingManager, cursorManager, (newRoomId) => {
       window.history.replaceState(null, '', `/room/${newRoomId}`)
       useRoomStore.getState().setRoomId(newRoomId)
     })
@@ -580,6 +582,7 @@ function createSession(
       roomId,
       scene,
       spriteManager,
+      buildingManager,
       cursorManager,
       () => setConnected(true),
       () => alert('Host disconnected'),

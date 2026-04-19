@@ -4,6 +4,7 @@ import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
 import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
+import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
@@ -18,6 +19,7 @@ export class GuestSession {
     roomId: string,
     private scene: Scene,
     private spriteManager: SpriteManager,
+    private buildingManager: BuildingManager,
     private cursorManager: CursorManager,
     onConnected: () => void,
     onHostDisconnected: () => void,
@@ -138,6 +140,21 @@ export class GuestSession {
       case 'player:leave': {
         playersStore.removePlayer(msg.playerId)
         this.cursorManager.remove(msg.playerId)
+        break
+      }
+      case 'building:place': {
+        useRoomStore.getState().placeTile(msg.tile)
+        this.buildingManager.placeTile(msg.tile, `/assets/tiles/${msg.tile.tileId}.svg`)
+        break
+      }
+      case 'building:remove': {
+        useRoomStore.getState().removeTile(msg.instanceId)
+        this.buildingManager.removeTile(msg.instanceId)
+        break
+      }
+      case 'building:snapshot': {
+        useRoomStore.getState().loadBuildingSnapshot(msg.tiles)
+        this.buildingManager.loadSnapshot(msg.tiles)
         break
       }
     }

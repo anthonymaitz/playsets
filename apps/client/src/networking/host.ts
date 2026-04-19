@@ -1,10 +1,11 @@
 import { SignalingClient } from './signaling'
 import { PeerConnection } from './peer'
-import { broadcastReliable, sendSnapshot } from './messages'
+import { broadcastReliable, sendSnapshot, sendBuildingSnapshot } from './messages'
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
 import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
+import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
@@ -17,6 +18,7 @@ export class HostSession {
   constructor(
     private scene: Scene,
     private spriteManager: SpriteManager,
+    private buildingManager: BuildingManager,
     _cursorManager: CursorManager,
     onRoomCreated: (roomId: string) => void,
   ) {
@@ -53,6 +55,8 @@ export class HostSession {
         const { sprites } = useRoomStore.getState()
         const { players, localPlayer } = usePlayersStore.getState()
         sendSnapshot(peer, Object.values(sprites), [localPlayer, ...players])
+        const { buildingTiles } = useRoomStore.getState()
+        sendBuildingSnapshot(peer, Object.values(buildingTiles))
       },
       onDisconnected: () => this.handleGuestLeft(guestSocketId),
     })
@@ -122,6 +126,20 @@ export class HostSession {
         break
       }
       case 'cursor:move': {
+        break
+      }
+      case 'building:place': {
+        useRoomStore.getState().placeTile(msg.tile)
+        this.buildingManager.placeTile(msg.tile, `/assets/tiles/${msg.tile.tileId}.svg`)
+        break
+      }
+      case 'building:remove': {
+        useRoomStore.getState().removeTile(msg.instanceId)
+        this.buildingManager.removeTile(msg.instanceId)
+        break
+      }
+      case 'building:snapshot': {
+        // Host never receives a snapshot — ignore defensively
         break
       }
       case 'player:join': {
