@@ -205,13 +205,40 @@ export class BuildingManager {
 
     if (mergeMode !== 'open') return { tiles: newTiles, removedIds }
 
-    // Normalization: every tile with all 4 cardinal neighbors occupied → floor; otherwise → wall.
-    // This corrects any type mismatches across the entire building without case-by-case logic.
+    // Build complete view of all tiles after Room 2 placement
     const allAfter: Record<string, BuildingTile> = { ...effectiveTiles }
     for (const t of newTiles) allAfter[t.instanceId] = t
     const occupied = new Set(Object.values(allAfter).map(t => `${t.col},${t.row}`))
 
-    const replacedNewIds = new Set<string>()
+    // Pass 1: corner fill — any empty cell with both a horizontal and vertical occupied neighbor
+    // is an L-corner gap in the perimeter; fill it with a wall (single scan, no cascade).
+    const cornerFills: BuildingTile[] = []
+    const checked = new Set<string>()
+    const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+    for (const tile of Object.values(allAfter)) {
+      for (const [dc, dr] of dirs) {
+        const ec = tile.col + dc
+        const er = tile.row + dr
+        const key = `${ec},${er}`
+        if (occupied.has(key) || checked.has(key)) continue
+        checked.add(key)
+        const hOcc = occupied.has(`${ec - 1},${er}`) || occupied.has(`${ec + 1},${er}`)
+        const vOcc = occupied.has(`${ec},${er - 1}`) || occupied.has(`${ec},${er + 1}`)
+        if (hOcc && vOcc) {
+          const fill: BuildingTile = { instanceId: nanoid(), tileId: wallTileId, col: ec, row: er }
+          this.placeTile(fill, this.tilePath(wallTileId))
+          cornerFills.push(fill)
+        }
+      }
+    }
+    // Commit corner fills into allAfter + occupied before normalization
+    for (const fill of cornerFills) {
+      occupied.add(`${fill.col},${fill.row}`)
+      allAfter[fill.instanceId] = fill
+    }
+
+    // Pass 2: normalize — recompute wall vs floor for every tile based on updated neighborhood
+    const replacedIds = new Set<string>()
     const normTiles: BuildingTile[] = []
 
     for (const [id, tile] of Object.entries(allAfter)) {
@@ -228,16 +255,16 @@ export class BuildingManager {
       const fix: BuildingTile = { instanceId: nanoid(), tileId: correctTileId, col: tile.col, row: tile.row }
       this.placeTile(fix, this.tilePath(correctTileId))
       normTiles.push(fix)
-
-      if (existingTiles[id]) {
-        removedIds.push(id)  // was in store before this placement
-      } else {
-        replacedNewIds.add(id)  // was just created — not yet in store
-      }
+      replacedIds.add(id)
+      if (existingTiles[id]) removedIds.push(id)
     }
 
     return {
-      tiles: [...newTiles.filter(t => !replacedNewIds.has(t.instanceId)), ...normTiles],
+      tiles: [
+        ...newTiles.filter(t => !replacedIds.has(t.instanceId)),
+        ...cornerFills.filter(t => !replacedIds.has(t.instanceId)),
+        ...normTiles,
+      ],
       removedIds,
     }
   }
