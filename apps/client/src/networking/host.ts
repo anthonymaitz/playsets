@@ -42,7 +42,14 @@ export class HostSession {
 
   private handleReconnect(): void {
     if (!this.currentRoomId) return
-    this.signaling.createRoom(this.currentRoomId).catch((err: unknown) => {
+    this.signaling.createRoom(this.currentRoomId).then(() => {
+      const { sprites, buildingTiles } = useRoomStore.getState()
+      const { players, localPlayer } = usePlayersStore.getState()
+      for (const peer of this.peers.values()) {
+        sendSnapshot(peer, Object.values(sprites), [localPlayer, ...players])
+        sendBuildingSnapshot(peer, Object.values(buildingTiles))
+      }
+    }).catch((err: unknown) => {
       console.error('Failed to re-register room after reconnect:', err)
     })
   }

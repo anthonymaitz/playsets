@@ -10,6 +10,7 @@ export function JoinDialog({ onDone }: Props) {
   const submit = () => {
     if (!name.trim()) return
     setDisplayName(name.trim())
+    localStorage.setItem('playsets-display-name', name.trim())
     onDone()
   }
 

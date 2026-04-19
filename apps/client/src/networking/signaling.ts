@@ -13,9 +13,13 @@ export interface SignalingEvents {
 
 export class SignalingClient {
   private socket: Socket
+  private visibilityHandler: (() => void) | null = null
 
   constructor(events: SignalingEvents, onReconnect?: () => void) {
-    this.socket = io(SIGNALING_URL, { transports: ['websocket'] })
+    this.socket = io(SIGNALING_URL, {
+      transports: ['websocket'],
+      pingTimeout: 60000,   // 60s — tolerant of background tab throttling
+    })
     this.socket.on('guest-joined', events.onGuestJoined)
     this.socket.on('offer', ({ from, offer }: { from: string; offer: RTCSessionDescriptionInit }) =>
       events.onOffer(from, offer))
@@ -30,6 +34,13 @@ export class SignalingClient {
       if (firstConnect) { firstConnect = false; return }
       onReconnect?.()
     })
+
+    this.visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && !this.socket.connected) {
+        this.socket.connect()
+      }
+    }
+    document.addEventListener('visibilitychange', this.visibilityHandler)
   }
 
   createRoom(existingRoomId?: string): Promise<string> {
@@ -71,6 +82,10 @@ export class SignalingClient {
   }
 
   disconnect(): void {
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler)
+      this.visibilityHandler = null
+    }
     this.socket.disconnect()
   }
 }

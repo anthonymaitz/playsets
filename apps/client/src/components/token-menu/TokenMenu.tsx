@@ -15,6 +15,7 @@ interface Props {
   onAnimate: (instanceId: string, animation: AnimationName) => void
   onSpeech: (instanceId: string, speech: string) => void
   onToggleHide: (instanceId: string, hidden: boolean) => void
+  onRemove: (instanceId: string) => void
 }
 
 const LABEL: React.CSSProperties = {
@@ -33,7 +34,7 @@ const SECTION: React.CSSProperties = {
 export function TokenMenu({
   instanceId,
   activeStatuses, activeAnimation, currentSpeech, isHidden,
-  onEmote, onToggleStatus, onAnimate, onSpeech, onToggleHide,
+  onEmote, onToggleStatus, onAnimate, onSpeech, onToggleHide, onRemove,
 }: Props) {
   return (
     <>
@@ -88,6 +89,23 @@ export function TokenMenu({
         <div style={SECTION}>
           <div style={LABEL}>Speech</div>
           <SpeechPanel instanceId={instanceId} currentSpeech={currentSpeech} onSpeech={onSpeech} />
+        </div>
+
+        <div style={VDIVIDER} />
+
+        <div style={SECTION}>
+          <div style={LABEL}>Token</div>
+          <button
+            onPointerDown={(e) => { e.stopPropagation(); onRemove(instanceId) }}
+            style={{
+              height: 28, padding: '0 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              background: 'rgba(220,50,50,0.15)',
+              border: '1px solid rgba(220,50,50,0.4)',
+              borderRadius: 4, color: '#f87171', whiteSpace: 'nowrap',
+            }}
+          >
+            🗑 Remove
+          </button>
         </div>
       </div>
     </>

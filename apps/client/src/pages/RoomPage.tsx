@@ -67,7 +67,14 @@ export function RoomPage() {
   const draggingRoomRef = useRef<{ lastCol: number; lastRow: number } | null>(null)
   const isPreviewDraggingRef = useRef(false)
 
-  const [needsName, setNeedsName] = useState(true)
+  const [needsName, setNeedsName] = useState(() => {
+    const saved = localStorage.getItem('playsets-display-name')
+    if (saved) {
+      usePlayersStore.getState().setDisplayName(saved)
+      return false
+    }
+    return true
+  })
   const [selectedSprite, setSelectedSprite] = useState<SpriteManifestEntry | null>(null)
   const [tokenMenu, setTokenMenu] = useState<TokenMenuState | null>(null)
   const [directionPicker, setDirectionPicker] = useState<{ instanceId: string; x: number; y: number } | null>(null)
@@ -124,6 +131,8 @@ export function RoomPage() {
 
   useEffect(() => {
     if (needsName || !canvasRef.current) return
+
+    useRoomStore.getState().reset()
 
     bgCleanupRef.current = () => {}
     const { engine, scene, camera, ambientLight } = createScene(canvasRef.current)
@@ -452,6 +461,10 @@ export function RoomPage() {
             useRoomStore.getState().setHidden(instanceId, hidden)
             spriteManagerRef.current?.setHidden(instanceId, hidden)
             dispatchMsg({ type: 'sprite:hide', instanceId, hidden })
+          }}
+          onRemove={(instanceId) => {
+            dispatchMsg({ type: 'sprite:remove', instanceId })
+            setTokenMenu(null)
           }}
         />
       )}
