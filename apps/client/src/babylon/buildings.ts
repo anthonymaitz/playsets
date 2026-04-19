@@ -45,17 +45,21 @@ export class BuildingManager {
   removeTile(instanceId: string): void {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
-    mesh.dispose()
+    mesh.dispose(false, true)
     this.meshes.delete(instanceId)
   }
 
   loadSnapshot(tiles: BuildingTile[]): void {
     this.clearTiles()
-    for (const tile of tiles) this.placeTile(tile, `/assets/tiles/${tile.tileId}.svg`)
+    for (const tile of tiles) this.placeTile(tile, this.tilePath(tile.tileId))
+  }
+
+  private tilePath(tileId: string): string {
+    return `/assets/tiles/${tileId}.svg`
   }
 
   private clearTiles(): void {
-    for (const mesh of this.meshes.values()) mesh.dispose()
+    for (const mesh of this.meshes.values()) mesh.dispose(false, true)
     this.meshes.clear()
   }
 
@@ -140,13 +144,13 @@ export class BuildingManager {
       mergeMode,
     )
     const tiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), ...def }))
-    for (const tile of tiles) this.placeTile(tile, `/assets/tiles/${tile.tileId}.svg`)
+    for (const tile of tiles) this.placeTile(tile, this.tilePath(tile.tileId))
     this.previewStartCell = null
     return tiles
   }
 
   private clearPreview(): void {
-    for (const mesh of this.previewMeshes) mesh.dispose()
+    for (const mesh of this.previewMeshes) mesh.dispose(false, true)
     this.previewMeshes = []
   }
 
