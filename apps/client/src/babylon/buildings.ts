@@ -205,68 +205,63 @@ export class BuildingManager {
 
     if (mergeMode !== 'open') return { tiles: newTiles, removedIds }
 
-    // Build complete view of all tiles after Room 2 placement
+    // Build position-keyed view of all tiles after placement
     const allAfter: Record<string, BuildingTile> = { ...effectiveTiles }
     for (const t of newTiles) allAfter[t.instanceId] = t
     const occupied = new Set(Object.values(allAfter).map(t => `${t.col},${t.row}`))
 
-    // Pass 1: corner fill — any empty cell with both a horizontal and vertical occupied neighbor
-    // is an L-corner gap in the perimeter; fill it with a wall (single scan, no cascade).
-    const cornerFills: BuildingTile[] = []
-    const checked = new Set<string>()
-    const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]]
-    for (const tile of Object.values(allAfter)) {
-      for (const [dc, dr] of dirs) {
-        const ec = tile.col + dc
-        const er = tile.row + dr
-        const key = `${ec},${er}`
-        if (occupied.has(key) || checked.has(key)) continue
-        checked.add(key)
-        const hOcc = occupied.has(`${ec - 1},${er}`) || occupied.has(`${ec + 1},${er}`)
-        const vOcc = occupied.has(`${ec},${er - 1}`) || occupied.has(`${ec},${er + 1}`)
-        if (hOcc && vOcc) {
-          const fill: BuildingTile = { instanceId: nanoid(), tileId: wallTileId, col: ec, row: er }
-          this.placeTile(fill, this.tilePath(wallTileId))
-          cornerFills.push(fill)
-        }
-      }
-    }
-    // Commit corner fills into allAfter + occupied before normalization
-    for (const fill of cornerFills) {
-      occupied.add(`${fill.col},${fill.row}`)
-      allAfter[fill.instanceId] = fill
-    }
-
-    // Pass 2: normalize — recompute wall vs floor for every tile based on updated neighborhood
-    const replacedIds = new Set<string>()
-    const normTiles: BuildingTile[] = []
-
+    // Pass 1: edge detection — painted cell with any empty cardinal neighbor → wall
+    type PosEntry = { tile: BuildingTile; correctType: 'wall' | 'floor'; inExisting: boolean }
+    const posMap = new Map<string, PosEntry>()
     for (const [id, tile] of Object.entries(allAfter)) {
-      const shouldBeWall = (
+      const hasEmptyNeighbor =
         !occupied.has(`${tile.col - 1},${tile.row}`) ||
         !occupied.has(`${tile.col + 1},${tile.row}`) ||
         !occupied.has(`${tile.col},${tile.row - 1}`) ||
         !occupied.has(`${tile.col},${tile.row + 1}`)
-      )
-      if (shouldBeWall === tile.tileId.includes('wall')) continue
-
-      const correctTileId = shouldBeWall ? wallTileId : floorTileId
-      this.removeTile(id)
-      const fix: BuildingTile = { instanceId: nanoid(), tileId: correctTileId, col: tile.col, row: tile.row }
-      this.placeTile(fix, this.tilePath(correctTileId))
-      normTiles.push(fix)
-      replacedIds.add(id)
-      if (existingTiles[id]) removedIds.push(id)
+      posMap.set(`${tile.col},${tile.row}`, {
+        tile,
+        correctType: hasEmptyNeighbor ? 'wall' : 'floor',
+        inExisting: id in existingTiles,
+      })
     }
 
-    return {
-      tiles: [
-        ...newTiles.filter(t => !replacedIds.has(t.instanceId)),
-        ...cornerFills.filter(t => !replacedIds.has(t.instanceId)),
-        ...normTiles,
-      ],
-      removedIds,
+    // Pass 2: inner corner — a floor tile diagonal to two perpendicular walls
+    // (whose shared diagonal is not a wall) closes a concave perimeter gap.
+    // Walls sit on painted floor tiles only; no new cells are added outside the room.
+    const diags: [number, number][] = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+    for (const [key, entry] of posMap) {
+      if (entry.correctType !== 'floor') continue
+      const col = entry.tile.col
+      const row = entry.tile.row
+      for (const [dc, dr] of diags) {
+        const hWall = posMap.get(`${col + dc},${row}`)?.correctType === 'wall'
+        const vWall = posMap.get(`${col},${row + dr}`)?.correctType === 'wall'
+        const diagWall = posMap.get(`${col + dc},${row + dr}`)?.correctType === 'wall'
+        if (hWall && vWall && !diagWall) {
+          entry.correctType = 'wall'
+          break
+        }
+      }
     }
+
+    // Pass 3: apply corrections — dispose mistyped meshes, place correct ones
+    const finalTiles: BuildingTile[] = []
+    for (const entry of posMap.values()) {
+      const currentType = entry.tile.tileId.includes('wall') ? 'wall' : 'floor'
+      if (currentType === entry.correctType) {
+        if (!entry.inExisting) finalTiles.push(entry.tile)
+        continue
+      }
+      const correctTileId = entry.correctType === 'wall' ? wallTileId : floorTileId
+      this.removeTile(entry.tile.instanceId)
+      const fixed: BuildingTile = { instanceId: nanoid(), tileId: correctTileId, col: entry.tile.col, row: entry.tile.row }
+      this.placeTile(fixed, this.tilePath(correctTileId))
+      finalTiles.push(fixed)
+      if (entry.inExisting) removedIds.push(entry.tile.instanceId)
+    }
+
+    return { tiles: finalTiles, removedIds }
   }
 
   private clearPreview(): void {
