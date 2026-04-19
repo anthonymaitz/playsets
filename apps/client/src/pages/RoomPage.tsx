@@ -64,6 +64,7 @@ export function RoomPage() {
   const mergeModeRef = useRef<'open' | 'walled'>('open')
   const previewEndRef = useRef<{ col: number; row: number } | null>(null)
   const draggingCornerRef = useRef<'nw' | 'ne' | 'sw' | 'se' | null>(null)
+  const isPreviewDraggingRef = useRef(false)
 
   const [needsName, setNeedsName] = useState(true)
   const [selectedSprite, setSelectedSprite] = useState<SpriteManifestEntry | null>(null)
@@ -169,6 +170,7 @@ export function RoomPage() {
         if (!pick.hit || !pick.pickedPoint) return
         const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
         if (buildModeRef.current === 'build') {
+          isPreviewDraggingRef.current = true
           bm.beginPreview(col, row)
           bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
           previewEndRef.current = { col, row }
@@ -185,11 +187,16 @@ export function RoomPage() {
 
       if (info.type === PointerEventTypes.POINTERMOVE && buildModeRef.current === 'build' && bm.getPreviewStart()) {
         if (draggingCornerRef.current) return
+        if (!isPreviewDraggingRef.current) return
         const pick = scene.pick(scene.pointerX, scene.pointerY)
         if (!pick.hit || !pick.pickedPoint) return
         const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
         bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
         previewEndRef.current = { col, row }
+      }
+
+      if (info.type === PointerEventTypes.POINTERUP) {
+        isPreviewDraggingRef.current = false
       }
     })
 
@@ -321,18 +328,7 @@ export function RoomPage() {
       if (!pick.hit || !pick.pickedPoint) return
       const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
 
-      const previewRect = bm.getPreviewStart()
-      const end = previewEndRef.current
-      if (previewRect && end) {
-        const { minCol, minRow, maxCol, maxRow } = normalizeRect({ startCol: previewRect.startCol, startRow: previewRect.startRow, endCol: end.col, endRow: end.row })
-        const opposites = {
-          nw: { col: maxCol, row: maxRow },
-          ne: { col: minCol, row: maxRow },
-          sw: { col: maxCol, row: minRow },
-          se: { col: minCol, row: minRow },
-        }
-        bm.setPreviewStart(opposites[corner].col, opposites[corner].row)
-      }
+      // Removed: reanchor logic (was oscillating — reanchor now happens once in onCornerDragStart)
       bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
       previewEndRef.current = { col, row }
     }
@@ -476,7 +472,25 @@ export function RoomPage() {
             mergeMode={mergeMode}
             onMergeModeChange={setMergeMode}
             onPlace={handlePlaceRoom}
-            onCornerDragStart={(corner) => { draggingCornerRef.current = corner }}
+            onCornerDragStart={(corner) => {
+              const bm = buildingManagerRef.current
+              const previewRect = bm?.getPreviewStart()
+              const end = previewEndRef.current
+              if (bm && previewRect && end) {
+                const { minCol, minRow, maxCol, maxRow } = normalizeRect({
+                  startCol: previewRect.startCol, startRow: previewRect.startRow,
+                  endCol: end.col, endRow: end.row,
+                })
+                const opposites = {
+                  nw: { col: maxCol, row: maxRow },
+                  ne: { col: minCol, row: maxRow },
+                  sw: { col: maxCol, row: minRow },
+                  se: { col: minCol, row: minRow },
+                }
+                bm.setPreviewStart(opposites[corner].col, opposites[corner].row)
+              }
+              draggingCornerRef.current = corner
+            }}
           />
         </>
       )}

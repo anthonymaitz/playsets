@@ -1,4 +1,4 @@
-import { Scene, MeshBuilder, StandardMaterial, Texture, Mesh, Vector3 } from '@babylonjs/core'
+import { Scene, MeshBuilder, StandardMaterial, DynamicTexture, Texture, Mesh, Vector3 } from '@babylonjs/core'
 import { cellToWorld, CELL_SIZE } from './grid'
 import { generateRoomTiles, normalizeRect } from './buildingUtils'
 import type { BuildingTile } from '../types'
@@ -16,10 +16,26 @@ export class BuildingManager {
 
   private getOrLoadTexture(path: string): Texture {
     if (this.textureCache.has(path)) return this.textureCache.get(path)!
-    const tex = new Texture(path, this.scene)
-    tex.hasAlpha = true
-    this.textureCache.set(path, tex)
-    return tex
+    const SIZE = 64
+    const dt = new DynamicTexture(`dtex-${path}`, { width: SIZE, height: SIZE }, this.scene, false)
+    const ctx = dt.getContext() as CanvasRenderingContext2D
+    const isWall = path.includes('wall')
+    if (isWall) {
+      ctx.fillStyle = '#8B4513'
+      ctx.fillRect(0, 0, SIZE, SIZE)
+      ctx.strokeStyle = '#6B3410'
+      ctx.lineWidth = 3
+      ctx.strokeRect(3, 3, SIZE - 6, SIZE - 6)
+    } else {
+      ctx.fillStyle = '#8B7355'
+      ctx.fillRect(0, 0, SIZE, SIZE)
+      ctx.fillStyle = '#7A6245'
+      ctx.fillRect(4, 4, 26, 26)
+      ctx.fillRect(34, 34, 26, 26)
+    }
+    dt.update()
+    this.textureCache.set(path, dt)
+    return dt
   }
 
   private createTilePlane(id: string, col: number, row: number, path: string, alpha = 1): Mesh {
@@ -29,7 +45,9 @@ export class BuildingManager {
     plane.position.set(pos.x, TILE_Y, pos.z)
     plane.renderingGroupId = 0
     const mat = new StandardMaterial(`bmat-${id}`, this.scene)
-    mat.diffuseTexture = this.getOrLoadTexture(path)
+    const tex = this.getOrLoadTexture(path)
+    mat.diffuseTexture = tex
+    mat.emissiveTexture = tex
     mat.useAlphaFromDiffuseTexture = true
     mat.alpha = alpha
     mat.backFaceCulling = false
@@ -45,7 +63,9 @@ export class BuildingManager {
   removeTile(instanceId: string): void {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
-    mesh.dispose(false, true)
+    const mat = mesh.material
+    mesh.dispose()
+    mat?.dispose()
     this.meshes.delete(instanceId)
   }
 
@@ -59,7 +79,11 @@ export class BuildingManager {
   }
 
   private clearTiles(): void {
-    for (const mesh of this.meshes.values()) mesh.dispose(false, true)
+    for (const mesh of this.meshes.values()) {
+      const mat = mesh.material
+      mesh.dispose()
+      mat?.dispose()
+    }
     this.meshes.clear()
   }
 
@@ -150,7 +174,11 @@ export class BuildingManager {
   }
 
   private clearPreview(): void {
-    for (const mesh of this.previewMeshes) mesh.dispose(false, true)
+    for (const mesh of this.previewMeshes) {
+      const mat = mesh.material
+      mesh.dispose()
+      mat?.dispose()
+    }
     this.previewMeshes = []
   }
 
