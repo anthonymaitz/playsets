@@ -178,45 +178,15 @@ export class BuildingManager {
     const removedIds: string[] = []
     let effectiveTiles = existingTiles
 
-    const passageTiles: BuildingTile[] = []
-
     if (mergeMode === 'open') {
+      // Clear Room 2's entire footprint — normalization pass below fixes all type issues
       const filtered: Record<string, BuildingTile> = {}
       for (const [id, tile] of Object.entries(existingTiles)) {
-        const inBounds = tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow
-        if (!inBounds) { filtered[id] = tile; continue }
-
-        const onPerimeter = tile.col === minCol || tile.col === maxCol || tile.row === minRow || tile.row === maxRow
-        const isCorner = (tile.col === minCol || tile.col === maxCol) && (tile.row === minRow || tile.row === maxRow)
-
-        if (!onPerimeter) {
-          if (tile.tileId.includes('wall')) {
-            // Interior wall from a previous room now inside Room 2 → remove; Room 2 fills with floor
-            removedIds.push(id)
-            this.removeTile(id)
-          } else {
-            filtered[id] = tile
-          }
-        } else if (isCorner) {
-          if (tile.tileId.includes('wall')) {
-            filtered[id] = tile  // shared outer corner wall — keep
-          } else {
-            // Floor at Room 2's corner: remove so Room 2 can place its corner wall
-            removedIds.push(id)
-            this.removeTile(id)
-          }
+        if (tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow) {
+          removedIds.push(id)
+          this.removeTile(id)
         } else {
-          // Non-corner perimeter cell
-          if (tile.tileId.includes('wall')) {
-            // Shared lateral wall → open passage
-            removedIds.push(id)
-            this.removeTile(id)
-            const passage: BuildingTile = { instanceId: nanoid(), tileId: floorTileId, col: tile.col, row: tile.row }
-            passageTiles.push(passage)
-            filtered[passage.instanceId] = passage
-          } else {
-            filtered[id] = tile
-          }
+          filtered[id] = tile
         }
       }
       effectiveTiles = filtered
@@ -230,10 +200,46 @@ export class BuildingManager {
       mergeMode,
     )
     const newTiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), ...def }))
-    const tiles = [...passageTiles, ...newTiles]
-    for (const tile of tiles) this.placeTile(tile, this.tilePath(tile.tileId))
+    for (const tile of newTiles) this.placeTile(tile, this.tilePath(tile.tileId))
     this.previewStartCell = null
-    return { tiles, removedIds }
+
+    if (mergeMode !== 'open') return { tiles: newTiles, removedIds }
+
+    // Normalization: every tile with all 4 cardinal neighbors occupied → floor; otherwise → wall.
+    // This corrects any type mismatches across the entire building without case-by-case logic.
+    const allAfter: Record<string, BuildingTile> = { ...effectiveTiles }
+    for (const t of newTiles) allAfter[t.instanceId] = t
+    const occupied = new Set(Object.values(allAfter).map(t => `${t.col},${t.row}`))
+
+    const replacedNewIds = new Set<string>()
+    const normTiles: BuildingTile[] = []
+
+    for (const [id, tile] of Object.entries(allAfter)) {
+      const shouldBeWall = (
+        !occupied.has(`${tile.col - 1},${tile.row}`) ||
+        !occupied.has(`${tile.col + 1},${tile.row}`) ||
+        !occupied.has(`${tile.col},${tile.row - 1}`) ||
+        !occupied.has(`${tile.col},${tile.row + 1}`)
+      )
+      if (shouldBeWall === tile.tileId.includes('wall')) continue
+
+      const correctTileId = shouldBeWall ? wallTileId : floorTileId
+      this.removeTile(id)
+      const fix: BuildingTile = { instanceId: nanoid(), tileId: correctTileId, col: tile.col, row: tile.row }
+      this.placeTile(fix, this.tilePath(correctTileId))
+      normTiles.push(fix)
+
+      if (existingTiles[id]) {
+        removedIds.push(id)  // was in store before this placement
+      } else {
+        replacedNewIds.add(id)  // was just created — not yet in store
+      }
+    }
+
+    return {
+      tiles: [...newTiles.filter(t => !replacedNewIds.has(t.instanceId)), ...normTiles],
+      removedIds,
+    }
   }
 
   private clearPreview(): void {
