@@ -389,7 +389,10 @@ export function RoomPage() {
     const session = sessionRef.current
     if (!bm || !end || !(session instanceof HostSession)) return
     const { buildingTiles } = useRoomStore.getState()
-    const tiles = bm.commitPreview(end.col, end.row, wallTileId, floorTileId, buildingTiles, mergeMode)
+    const { tiles, removedIds } = bm.commitPreview(end.col, end.row, wallTileId, floorTileId, buildingTiles, mergeMode)
+    for (const instanceId of removedIds) {
+      session.localAction({ type: 'building:remove', instanceId })
+    }
     for (const tile of tiles) {
       session.localAction({ type: 'building:place', tile })
     }

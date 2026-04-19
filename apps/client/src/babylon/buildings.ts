@@ -164,20 +164,47 @@ export class BuildingManager {
     floorTileId: string,
     existingTiles: Record<string, BuildingTile>,
     mergeMode: 'open' | 'walled',
-  ): BuildingTile[] {
-    if (!this.previewStartCell) return []
+  ): { tiles: BuildingTile[], removedIds: string[] } {
+    if (!this.previewStartCell) return { tiles: [], removedIds: [] }
     this.clearPreview()
+
+    const { minCol, minRow, maxCol, maxRow } = normalizeRect({
+      startCol: this.previewStartCell.col,
+      startRow: this.previewStartCell.row,
+      endCol,
+      endRow,
+    })
+
+    const removedIds: string[] = []
+    let effectiveTiles = existingTiles
+
+    if (mergeMode === 'open') {
+      // Remove existing wall tiles on this room's perimeter → creates open passages
+      const filtered: Record<string, BuildingTile> = {}
+      for (const [id, tile] of Object.entries(existingTiles)) {
+        const inBounds = tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow
+        const onPerimeter = tile.col === minCol || tile.col === maxCol || tile.row === minRow || tile.row === maxRow
+        if (inBounds && onPerimeter && tile.tileId.includes('wall')) {
+          removedIds.push(id)
+          this.removeTile(id)
+        } else {
+          filtered[id] = tile
+        }
+      }
+      effectiveTiles = filtered
+    }
+
     const tileDefs = generateRoomTiles(
       { startCol: this.previewStartCell.col, startRow: this.previewStartCell.row, endCol, endRow },
       wallTileId,
       floorTileId,
-      existingTiles,
+      effectiveTiles,
       mergeMode,
     )
     const tiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), ...def }))
     for (const tile of tiles) this.placeTile(tile, this.tilePath(tile.tileId))
     this.previewStartCell = null
-    return tiles
+    return { tiles, removedIds }
   }
 
   private clearPreview(): void {

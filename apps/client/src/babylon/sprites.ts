@@ -134,6 +134,8 @@ export class SpriteManager {
     if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath)
 
     if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
+
+    if (instance.hidden) this.setHidden(instance.instanceId, true)
   }
 
   private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string): void {
@@ -298,7 +300,7 @@ export class SpriteManager {
 
   setHidden(instanceId: string, hidden: boolean): void {
     const mesh = this.meshes.get(instanceId)
-    if (mesh) mesh.isVisible = !hidden
+    if (mesh) mesh.visibility = hidden ? 0.3 : 1
     const ind = this.indicators.get(instanceId)
     if (ind) ind.isVisible = !hidden
     const sp = this.tokenShadows.get(instanceId)
