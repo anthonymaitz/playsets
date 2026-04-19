@@ -185,7 +185,8 @@ export class BuildingManager {
       for (const [id, tile] of Object.entries(existingTiles)) {
         const inBounds = tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow
         const onPerimeter = tile.col === minCol || tile.col === maxCol || tile.row === minRow || tile.row === maxRow
-        if (inBounds && onPerimeter && tile.tileId.includes('wall')) {
+        const isCorner = (tile.col === minCol || tile.col === maxCol) && (tile.row === minRow || tile.row === maxRow)
+        if (inBounds && onPerimeter && !isCorner && tile.tileId.includes('wall')) {
           removedIds.push(id)
           this.removeTile(id)
           // Replace with a floor tile so the passage is walkable and the cell stays occupied
