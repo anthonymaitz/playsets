@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { PointerEventTypes } from '@babylonjs/core'
+import { PointerEventTypes, Vector3, Matrix } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera } from '@babylonjs/core'
+import { BuildingManager } from '../babylon/buildings'
+import { BuildingPalette } from '../components/BuildingPalette'
+import { BuildingControls } from '../components/BuildingControls'
+import type { ScreenCorners } from '../components/BuildingControls'
+import { normalizeRect } from '../babylon/buildingUtils'
 import { createScene } from '../babylon/scene'
 import { createGrid, setGridBackground, worldToCell } from '../babylon/grid'
 import { SpriteManager } from '../babylon/sprites'
@@ -51,6 +56,14 @@ export function RoomPage() {
   const dragControllerRef = useRef<DragController | null>(null)
   const weatherSystemRef = useRef<WeatherSystem | null>(null)
   const cameraAlphaRef = useRef(-Math.PI / 4)
+  const buildingManagerRef = useRef<BuildingManager | null>(null)
+  const buildingModeRef = useRef(false)
+  const buildModeRef = useRef<'build' | 'erase'>('build')
+  const wallTileIdRef = useRef('wall-wood')
+  const floorTileIdRef = useRef('floor-dirt')
+  const mergeModeRef = useRef<'open' | 'walled'>('open')
+  const previewEndRef = useRef<{ col: number; row: number } | null>(null)
+  const draggingCornerRef = useRef<'nw' | 'ne' | 'sw' | 'se' | null>(null)
 
   const [needsName, setNeedsName] = useState(true)
   const [selectedSprite, setSelectedSprite] = useState<SpriteManifestEntry | null>(null)
@@ -61,6 +74,12 @@ export function RoomPage() {
   const [currentWeather, setCurrentWeather] = useState<WeatherType>('sunny')
   const [currentBackground, setCurrentBackground] = useState<BackgroundType>('grass')
   const [cameraAlpha, setCameraAlpha] = useState(-Math.PI / 4)
+  const [buildingMode, setBuildingMode] = useState(false)
+  const [buildMode, setBuildMode] = useState<'build' | 'erase'>('build')
+  const [wallTileId, setWallTileId] = useState('wall-wood')
+  const [floorTileId, setFloorTileId] = useState('floor-dirt')
+  const [mergeMode, setMergeMode] = useState<'open' | 'walled'>('open')
+  const [screenCorners, setScreenCorners] = useState<ScreenCorners | null>(null)
 
   const sprites = useRoomStore((s) => s.sprites)
 
@@ -95,6 +114,12 @@ export function RoomPage() {
     }
   }, [isHost, roomId])
 
+  useEffect(() => { buildingModeRef.current = buildingMode }, [buildingMode])
+  useEffect(() => { buildModeRef.current = buildMode }, [buildMode])
+  useEffect(() => { wallTileIdRef.current = wallTileId }, [wallTileId])
+  useEffect(() => { floorTileIdRef.current = floorTileId }, [floorTileId])
+  useEffect(() => { mergeModeRef.current = mergeMode }, [mergeMode])
+
   useEffect(() => {
     if (needsName || !canvasRef.current) return
 
@@ -105,6 +130,7 @@ export function RoomPage() {
     groundRef.current = ground
     const spriteManager = new SpriteManager(scene, camera)
     spriteManagerRef.current = spriteManager
+    buildingManagerRef.current = new BuildingManager(scene)
     const weatherSystem = new WeatherSystem(scene, ground, ambientLight, camera)
     weatherSystemRef.current = weatherSystem
     weatherSystem.setWeather('sunny')
@@ -128,10 +154,44 @@ export function RoomPage() {
       setDirectionPicker({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
     }
 
-    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu)
+    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu, buildingModeRef)
     dragControllerRef.current = dragController
 
     setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker)
+
+    scene.onPointerObservable.add((info) => {
+      if (!buildingModeRef.current) return
+      const bm = buildingManagerRef.current
+      if (!bm) return
+
+      if (info.type === PointerEventTypes.POINTERDOWN) {
+        const pick = scene.pick(scene.pointerX, scene.pointerY)
+        if (!pick.hit || !pick.pickedPoint) return
+        const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+        if (buildModeRef.current === 'build') {
+          bm.beginPreview(col, row)
+          bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
+          previewEndRef.current = { col, row }
+        } else {
+          const { buildingTiles } = useRoomStore.getState()
+          for (const [id, tile] of Object.entries(buildingTiles)) {
+            if (tile.col === col && tile.row === row) {
+              ;(sessionRef.current as HostSession).localAction({ type: 'building:remove', instanceId: id })
+              break
+            }
+          }
+        }
+      }
+
+      if (info.type === PointerEventTypes.POINTERMOVE && buildModeRef.current === 'build' && bm.getPreviewStart()) {
+        if (draggingCornerRef.current) return
+        const pick = scene.pick(scene.pointerX, scene.pointerY)
+        if (!pick.hit || !pick.pickedPoint) return
+        const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+        bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
+        previewEndRef.current = { col, row }
+      }
+    })
 
     const handlePointerUp = (e: PointerEvent) => {
       if (dragController.consumeJustDropped()) return
@@ -192,6 +252,8 @@ export function RoomPage() {
       camera.onViewMatrixChangedObservable.remove(cameraObserver)
       bgCleanupRef.current()
       bgCleanupRef.current = () => {}
+      buildingManagerRef.current?.dispose()
+      buildingManagerRef.current = null
       weatherSystemRef.current?.dispose()
       weatherSystemRef.current = null
       spriteManagerRef.current = null
@@ -201,6 +263,102 @@ export function RoomPage() {
       engine.dispose()
     }
   }, [needsName, roomId, isHost])
+
+  useEffect(() => {
+    const scene = sceneRef.current
+    const canvas = canvasRef.current
+    if (!buildingMode || !scene || !canvas) return
+
+    const observer = scene.onBeforeRenderObservable.add(() => {
+      const bm = buildingManagerRef.current
+      const end = previewEndRef.current
+      if (!bm || !end) { setScreenCorners(null); return }
+
+      const worldCorners = bm.getPreviewWorldCorners(end.col, end.row)
+      if (!worldCorners) { setScreenCorners(null); return }
+
+      const engine = scene.getEngine()
+      const camera = scene.activeCamera!
+      const viewport = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
+      const transform = scene.getTransformMatrix()
+
+      const project = (v: Vector3) => {
+        const s = Vector3.Project(v, Matrix.Identity(), transform, viewport)
+        return { x: s.x, y: s.y }
+      }
+
+      const rect = bm.getPreviewStart()
+      if (!rect) { setScreenCorners(null); return }
+      const { minCol, minRow, maxCol, maxRow } = normalizeRect({ startCol: rect.startCol, startRow: rect.startRow, endCol: end.col, endRow: end.row })
+
+      setScreenCorners({
+        nw: project(worldCorners.nw),
+        ne: project(worldCorners.ne),
+        sw: project(worldCorners.sw),
+        se: project(worldCorners.se),
+        center: project(worldCorners.center),
+        width: maxCol - minCol + 1,
+        height: maxRow - minRow + 1,
+      })
+    })
+
+    return () => { scene.onBeforeRenderObservable.remove(observer) }
+  }, [buildingMode])
+
+  useEffect(() => {
+    if (!buildingMode) return
+
+    const onMove = (e: PointerEvent) => {
+      const corner = draggingCornerRef.current
+      const bm = buildingManagerRef.current
+      const scene = sceneRef.current
+      if (!corner || !bm || !scene) return
+
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const pick = scene.pick(e.clientX - rect.left, e.clientY - rect.top)
+      if (!pick.hit || !pick.pickedPoint) return
+      const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+
+      const previewRect = bm.getPreviewStart()
+      const end = previewEndRef.current
+      if (previewRect && end) {
+        const { minCol, minRow, maxCol, maxRow } = normalizeRect({ startCol: previewRect.startCol, startRow: previewRect.startRow, endCol: end.col, endRow: end.row })
+        const opposites = {
+          nw: { col: maxCol, row: maxRow },
+          ne: { col: minCol, row: maxRow },
+          sw: { col: maxCol, row: minRow },
+          se: { col: minCol, row: minRow },
+        }
+        bm.setPreviewStart(opposites[corner].col, opposites[corner].row)
+      }
+      bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
+      previewEndRef.current = { col, row }
+    }
+
+    const onUp = () => { draggingCornerRef.current = null }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [buildingMode])
+
+  const handlePlaceRoom = () => {
+    const bm = buildingManagerRef.current
+    const end = previewEndRef.current
+    if (!bm || !end) return
+    const { buildingTiles } = useRoomStore.getState()
+    const tiles = bm.commitPreview(end.col, end.row, wallTileId, floorTileId, buildingTiles, mergeMode)
+    for (const tile of tiles) {
+      useRoomStore.getState().placeTile(tile)
+      sendMsg(sessionRef.current as HostSession, { type: 'building:place', tile })
+    }
+    previewEndRef.current = null
+    setScreenCorners(null)
+  }
 
   const dispatchMsg = (msg: SessionMsg) => sendMsg(sessionRef.current, msg)
 
@@ -272,6 +430,52 @@ export function RoomPage() {
           onDismiss={() => setDirectionPicker(null)}
         />
       )}
+      {isHost && (
+        <button
+          onClick={() => {
+            setBuildingMode((prev) => {
+              if (prev) buildingManagerRef.current?.cancelPreview()
+              return !prev
+            })
+          }}
+          style={{
+            position: 'fixed',
+            left: 8,
+            bottom: 8,
+            width: 36,
+            height: 36,
+            borderRadius: 6,
+            border: 'none',
+            cursor: 'pointer',
+            background: buildingMode ? '#c8893a' : 'rgba(255,255,255,0.08)',
+            boxShadow: buildingMode ? '0 0 8px rgba(200,137,58,0.5)' : 'none',
+            fontSize: 16,
+            zIndex: 50,
+          }}
+          title="Building Tools"
+        >
+          🏠
+        </button>
+      )}
+      {buildingMode && (
+        <>
+          <BuildingPalette
+            wallTileId={wallTileId}
+            floorTileId={floorTileId}
+            mode={buildMode}
+            onWallSelect={setWallTileId}
+            onFloorSelect={setFloorTileId}
+            onModeChange={setBuildMode}
+          />
+          <BuildingControls
+            corners={screenCorners}
+            mergeMode={mergeMode}
+            onMergeModeChange={setMergeMode}
+            onPlace={handlePlaceRoom}
+            onCornerDragStart={(corner) => { draggingCornerRef.current = corner }}
+          />
+        </>
+      )}
       {!connected && !isHost && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80 }}>
           <p style={{ color: '#fff', fontSize: 20 }}>Connecting to host…</p>
@@ -289,17 +493,21 @@ function setupDragController(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   showDirPickerAtPointer: (instanceId: string) => void,
   setTokenMenu: (m: TokenMenuState | null) => void,
+  buildingModeRef: React.MutableRefObject<boolean>,
 ): DragController {
   return new DragController(scene, spriteManager, camera, {
     onDragMove: (instanceId, col, row) => {
+      if (buildingModeRef.current) return
       sendMsg(sessionRef.current, { type: 'sprite:drag', instanceId, col, row })
     },
     onDragDrop: (instanceId, col, row) => {
+      if (buildingModeRef.current) return
       useRoomStore.getState().moveSprite(instanceId, col, row)
       sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
     },
     onSpriteClick: (instanceId) => {
+      if (buildingModeRef.current) return
       const rect = canvasRef.current?.getBoundingClientRect()
       const sx = (rect?.left ?? 0) + scene.pointerX
       const sy = (rect?.top ?? 0) + scene.pointerY
