@@ -41,6 +41,12 @@ function sendMsg(session: HostSession | GuestSession | null, msg: SessionMsg): v
   else session?.send(msg)
 }
 
+function isWallCell(col: number, row: number): boolean {
+  return Object.values(useRoomStore.getState().buildingTiles).some(
+    (t) => t.col === col && t.row === row && t.tileId.includes('wall'),
+  )
+}
+
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const [searchParams] = useSearchParams()
@@ -220,6 +226,7 @@ export function RoomPage() {
       if (!pick?.hit || !pick.pickedPoint) return
 
       const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+      if (isWallCell(col, row)) return
       const newInstanceId = nanoid()
       const { localPlayer: lp } = usePlayersStore.getState()
       const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId }
@@ -577,6 +584,7 @@ function setupDragController(
     },
     onDragDrop: (instanceId, col, row) => {
       if (buildingModeRef.current) return
+      if (isWallCell(col, row)) return
       useRoomStore.getState().moveSprite(instanceId, col, row)
       sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
