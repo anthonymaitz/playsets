@@ -157,7 +157,7 @@ export function RoomPage() {
     const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu, buildingModeRef)
     dragControllerRef.current = dragController
 
-    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker)
+    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker, buildingModeRef)
 
     scene.onPointerObservable.add((info) => {
       if (!buildingModeRef.current) return
@@ -176,7 +176,7 @@ export function RoomPage() {
           const { buildingTiles } = useRoomStore.getState()
           for (const [id, tile] of Object.entries(buildingTiles)) {
             if (tile.col === col && tile.row === row) {
-              ;(sessionRef.current as HostSession).localAction({ type: 'building:remove', instanceId: id })
+              sendMsg(sessionRef.current, { type: 'building:remove', instanceId: id })
               break
             }
           }
@@ -278,7 +278,8 @@ export function RoomPage() {
       if (!worldCorners) { setScreenCorners(null); return }
 
       const engine = scene.getEngine()
-      const camera = scene.activeCamera!
+      const camera = scene.activeCamera
+      if (!camera) { setScreenCorners(null); return }
       const viewport = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
       const transform = scene.getTransformMatrix()
 
@@ -354,7 +355,7 @@ export function RoomPage() {
     const tiles = bm.commitPreview(end.col, end.row, wallTileId, floorTileId, buildingTiles, mergeMode)
     for (const tile of tiles) {
       useRoomStore.getState().placeTile(tile)
-      sendMsg(sessionRef.current as HostSession, { type: 'building:place', tile })
+      sendMsg(sessionRef.current, { type: 'building:place', tile })
     }
     previewEndRef.current = null
     setScreenCorners(null)
@@ -434,7 +435,10 @@ export function RoomPage() {
         <button
           onClick={() => {
             setBuildingMode((prev) => {
-              if (prev) buildingManagerRef.current?.cancelPreview()
+              if (prev) {
+                buildingManagerRef.current?.cancelPreview()
+                previewEndRef.current = null
+              }
               return !prev
             })
           }}
@@ -525,6 +529,7 @@ function setupScenePointerObservable(
   sessionRef: React.MutableRefObject<HostSession | GuestSession | null>,
   setTokenMenu: (m: TokenMenuState | null) => void,
   setDirectionPicker: (d: { instanceId: string; x: number; y: number } | null) => void,
+  buildingModeRef: React.MutableRefObject<boolean>,
 ): void {
   scene.onPointerObservable.add((info) => {
     if (info.type === PointerEventTypes.POINTERDOWN) {
@@ -533,6 +538,7 @@ function setupScenePointerObservable(
     }
 
     if (info.type !== PointerEventTypes.POINTERMOVE) return
+    if (buildingModeRef.current) return
 
     const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
 
