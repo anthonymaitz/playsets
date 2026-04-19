@@ -355,7 +355,6 @@ export function RoomPage() {
     const { buildingTiles } = useRoomStore.getState()
     const tiles = bm.commitPreview(end.col, end.row, wallTileId, floorTileId, buildingTiles, mergeMode)
     for (const tile of tiles) {
-      useRoomStore.getState().placeTile(tile)
       session.localAction({ type: 'building:place', tile })
     }
     previewEndRef.current = null
