@@ -39,6 +39,22 @@ export interface SpriteManifest {
   categories: SpriteCategory[]
 }
 
+export interface BuildingTile {
+  instanceId: string
+  tileId: string
+  col: number
+  row: number
+}
+
+export type TileCategory = 'wall' | 'floor'
+
+export interface TileManifestEntry {
+  id: string
+  label: string
+  path: string
+  category: TileCategory
+}
+
 export type GameMessage =
   | { type: 'state:snapshot'; sprites: SpriteInstance[]; players: Player[] }
   | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string }
@@ -54,3 +70,6 @@ export type GameMessage =
   | { type: 'cursor:move'; playerId: string; worldX: number; worldZ: number }
   | ({ type: 'player:join' } & Player)
   | { type: 'player:leave'; playerId: string }
+  | { type: 'building:place'; tile: BuildingTile }
+  | { type: 'building:remove'; instanceId: string }
+  | { type: 'building:snapshot'; tiles: BuildingTile[] }
