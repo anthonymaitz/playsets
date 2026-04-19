@@ -1,0 +1,8 @@
+{
+  "tiles": [
+    { "id": "wall-wood",   "label": "Wood Wall",   "path": "/assets/tiles/wall-wood.svg",   "category": "wall"  },
+    { "id": "wall-stone",  "label": "Stone Wall",  "path": "/assets/tiles/wall-stone.svg",  "category": "wall"  },
+    { "id": "floor-dirt",  "label": "Dirt Floor",  "path": "/assets/tiles/floor-dirt.svg",  "category": "floor" },
+    { "id": "floor-stone", "label": "Stone Floor", "path": "/assets/tiles/floor-stone.svg", "category": "floor" }
+  ]
+}
