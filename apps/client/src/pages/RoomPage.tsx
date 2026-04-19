@@ -130,7 +130,7 @@ export function RoomPage() {
     sceneRef.current = scene
     const ground = createGrid(scene)
     groundRef.current = ground
-    const spriteManager = new SpriteManager(scene, camera)
+    const spriteManager = new SpriteManager(scene, camera, isHost)
     spriteManagerRef.current = spriteManager
     buildingManagerRef.current = new BuildingManager(scene)
     const weatherSystem = new WeatherSystem(scene, ground, ambientLight, camera)

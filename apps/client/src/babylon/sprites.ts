@@ -51,7 +51,7 @@ export class SpriteManager {
   private torchLights = new Map<string, { light: PointLight; cleanup: () => void }>()
   private lastSnapIndex = -1
 
-  constructor(private scene: Scene, private camera?: ArcRotateCamera) {
+  constructor(private scene: Scene, private camera?: ArcRotateCamera, private isHost = false) {
     if (camera) {
       const fn = () => {
         const si = getCameraSnapIndex(camera.alpha)
@@ -300,7 +300,20 @@ export class SpriteManager {
 
   setHidden(instanceId: string, hidden: boolean): void {
     const mesh = this.meshes.get(instanceId)
-    if (mesh) mesh.visibility = hidden ? 0.3 : 1
+    if (mesh) {
+      if (hidden) {
+        if (this.isHost) {
+          mesh.isVisible = true
+          mesh.visibility = 0.3
+        } else {
+          mesh.isVisible = false
+          mesh.visibility = 1
+        }
+      } else {
+        mesh.isVisible = true
+        mesh.visibility = 1
+      }
+    }
     const ind = this.indicators.get(instanceId)
     if (ind) ind.isVisible = !hidden
     const sp = this.tokenShadows.get(instanceId)
