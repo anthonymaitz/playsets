@@ -64,6 +64,7 @@ export function RoomPage() {
   const mergeModeRef = useRef<'open' | 'walled'>('open')
   const previewEndRef = useRef<{ col: number; row: number } | null>(null)
   const draggingCornerRef = useRef<'nw' | 'ne' | 'sw' | 'se' | null>(null)
+  const draggingRoomRef = useRef<{ lastCol: number; lastRow: number } | null>(null)
   const isPreviewDraggingRef = useRef(false)
 
   const [needsName, setNeedsName] = useState(true)
@@ -290,9 +291,16 @@ export function RoomPage() {
       const viewport = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
       const transform = scene.getTransformMatrix()
 
+      // Fix: scale canvas-relative pixels to page-absolute coordinates
+      const cvs = canvasRef.current
+      if (!cvs) { setScreenCorners(null); return }
+      const canvasBounds = cvs.getBoundingClientRect()
+      const scaleX = canvasBounds.width / engine.getRenderWidth()
+      const scaleY = canvasBounds.height / engine.getRenderHeight()
+
       const project = (v: Vector3) => {
         const s = Vector3.Project(v, Matrix.Identity(), transform, viewport)
-        return { x: s.x, y: s.y }
+        return { x: s.x * scaleX + canvasBounds.left, y: s.y * scaleY + canvasBounds.top }
       }
 
       const rect = bm.getPreviewStart()
@@ -317,10 +325,9 @@ export function RoomPage() {
     if (!buildingMode) return
 
     const onMove = (e: PointerEvent) => {
-      const corner = draggingCornerRef.current
       const bm = buildingManagerRef.current
       const scene = sceneRef.current
-      if (!corner || !bm || !scene) return
+      if (!bm || !scene) return
 
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
@@ -328,12 +335,35 @@ export function RoomPage() {
       if (!pick.hit || !pick.pickedPoint) return
       const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
 
+      const roomDrag = draggingRoomRef.current
+      if (roomDrag !== null) {
+        const dc = col - roomDrag.lastCol
+        const dr = row - roomDrag.lastRow
+        if (dc !== 0 || dr !== 0) {
+          const previewRect = bm.getPreviewStart()
+          const end = previewEndRef.current
+          if (previewRect && end) {
+            bm.setPreviewStart(previewRect.startCol + dc, previewRect.startRow + dr)
+            const newEnd = { col: end.col + dc, row: end.row + dr }
+            previewEndRef.current = newEnd
+            bm.updatePreview(newEnd.col, newEnd.row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
+            draggingRoomRef.current = { lastCol: col, lastRow: row }
+          }
+        }
+        return
+      }
+
+      const corner = draggingCornerRef.current
+      if (!corner) return
       // Removed: reanchor logic (was oscillating — reanchor now happens once in onCornerDragStart)
       bm.updatePreview(col, row, `/assets/tiles/${wallTileIdRef.current}.svg`, `/assets/tiles/${floorTileIdRef.current}.svg`)
       previewEndRef.current = { col, row }
     }
 
-    const onUp = () => { draggingCornerRef.current = null }
+    const onUp = () => {
+      draggingCornerRef.current = null
+      draggingRoomRef.current = null
+    }
 
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -342,6 +372,16 @@ export function RoomPage() {
       window.removeEventListener('pointerup', onUp)
     }
   }, [buildingMode])
+
+  const handleRoomDragStart = (e: React.PointerEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    const scene = sceneRef.current
+    if (!rect || !scene) return
+    const pick = scene.pick(e.clientX - rect.left, e.clientY - rect.top)
+    if (!pick.hit || !pick.pickedPoint) return
+    const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+    draggingRoomRef.current = { lastCol: col, lastRow: row }
+  }
 
   const handlePlaceRoom = () => {
     const bm = buildingManagerRef.current
@@ -472,6 +512,7 @@ export function RoomPage() {
             mergeMode={mergeMode}
             onMergeModeChange={setMergeMode}
             onPlace={handlePlaceRoom}
+            onRoomDragStart={handleRoomDragStart}
             onCornerDragStart={(corner) => {
               const bm = buildingManagerRef.current
               const previewRect = bm?.getPreviewStart()

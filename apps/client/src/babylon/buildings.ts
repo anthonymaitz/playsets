@@ -39,11 +39,18 @@ export class BuildingManager {
   }
 
   private createTilePlane(id: string, col: number, row: number, path: string, alpha = 1): Mesh {
-    const plane = MeshBuilder.CreatePlane(`btile-${id}`, { size: CELL_SIZE }, this.scene)
-    plane.rotation.x = Math.PI / 2
+    const isWall = path.includes('wall')
     const pos = cellToWorld(col, row)
-    plane.position.set(pos.x, TILE_Y, pos.z)
-    plane.renderingGroupId = 0
+    let mesh: Mesh
+    if (isWall) {
+      mesh = MeshBuilder.CreateBox(`btile-${id}`, { width: CELL_SIZE, height: 0.4, depth: CELL_SIZE }, this.scene)
+      mesh.position.set(pos.x, 0.2, pos.z)
+    } else {
+      mesh = MeshBuilder.CreatePlane(`btile-${id}`, { size: CELL_SIZE }, this.scene)
+      mesh.rotation.x = Math.PI / 2
+      mesh.position.set(pos.x, TILE_Y, pos.z)
+    }
+    mesh.renderingGroupId = 0
     const mat = new StandardMaterial(`bmat-${id}`, this.scene)
     const tex = this.getOrLoadTexture(path)
     mat.diffuseTexture = tex
@@ -51,8 +58,8 @@ export class BuildingManager {
     mat.useAlphaFromDiffuseTexture = true
     mat.alpha = alpha
     mat.backFaceCulling = false
-    plane.material = mat
-    return plane
+    mesh.material = mat
+    return mesh
   }
 
   placeTile(tile: BuildingTile, path: string): void {

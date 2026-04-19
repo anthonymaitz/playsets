@@ -1,3 +1,4 @@
+import React from 'react'
 
 export interface ScreenCorners {
   nw: { x: number; y: number }
@@ -15,11 +16,12 @@ interface Props {
   onMergeModeChange: (m: 'open' | 'walled') => void
   onPlace: () => void
   onCornerDragStart: (corner: 'nw' | 'ne' | 'sw' | 'se') => void
+  onRoomDragStart: (e: React.PointerEvent) => void
 }
 
 const HANDLE_SIZE = 16
 
-export function BuildingControls({ corners, mergeMode, onMergeModeChange, onPlace, onCornerDragStart }: Props) {
+export function BuildingControls({ corners, mergeMode, onMergeModeChange, onPlace, onCornerDragStart, onRoomDragStart }: Props) {
   if (!corners) return null
 
   const Handle = ({ corner, pos }: { corner: 'nw' | 'ne' | 'sw' | 'se'; pos: { x: number; y: number } }) => (
@@ -48,6 +50,33 @@ export function BuildingControls({ corners, mergeMode, onMergeModeChange, onPlac
       <Handle corner="ne" pos={corners.ne} />
       <Handle corner="sw" pos={corners.sw} />
       <Handle corner="se" pos={corners.se} />
+
+      {/* Center move handle */}
+      <div
+        onPointerDown={(e) => { e.stopPropagation(); onRoomDragStart(e) }}
+        style={{
+          position: 'absolute',
+          left: corners.center.x - 12,
+          top: corners.center.y - 12,
+          width: 24,
+          height: 24,
+          background: 'rgba(10,15,10,0.88)',
+          border: '2px solid rgba(200,137,58,0.8)',
+          borderRadius: '50%',
+          cursor: 'move',
+          touchAction: 'none',
+          boxShadow: '0 1px 6px rgba(0,0,0,0.5)',
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(200,137,58,0.9)',
+          fontSize: 12,
+          userSelect: 'none',
+        }}
+      >
+        ✥
+      </div>
 
       {/* Floating control strip */}
       <div style={{
