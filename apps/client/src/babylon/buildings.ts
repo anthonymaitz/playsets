@@ -178,8 +178,9 @@ export class BuildingManager {
     const removedIds: string[] = []
     let effectiveTiles = existingTiles
 
+    const passageTiles: BuildingTile[] = []
+
     if (mergeMode === 'open') {
-      // Remove existing wall tiles on this room's perimeter → creates open passages
       const filtered: Record<string, BuildingTile> = {}
       for (const [id, tile] of Object.entries(existingTiles)) {
         const inBounds = tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow
@@ -187,6 +188,10 @@ export class BuildingManager {
         if (inBounds && onPerimeter && tile.tileId.includes('wall')) {
           removedIds.push(id)
           this.removeTile(id)
+          // Replace with a floor tile so the passage is walkable and the cell stays occupied
+          const passage: BuildingTile = { instanceId: nanoid(), tileId: floorTileId, col: tile.col, row: tile.row }
+          passageTiles.push(passage)
+          filtered[passage.instanceId] = passage  // mark occupied so generateRoomTiles skips it
         } else {
           filtered[id] = tile
         }
@@ -201,7 +206,8 @@ export class BuildingManager {
       effectiveTiles,
       mergeMode,
     )
-    const tiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), ...def }))
+    const newTiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), ...def }))
+    const tiles = [...passageTiles, ...newTiles]
     for (const tile of tiles) this.placeTile(tile, this.tilePath(tile.tileId))
     this.previewStartCell = null
     return { tiles, removedIds }
