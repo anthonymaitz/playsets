@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { SpriteInstance, FacingDir, AnimationName } from '../types'
+import type { SpriteInstance, FacingDir, AnimationName, BuildingTile } from '../types'
 
 interface RoomStore {
   roomId: string | null
   sprites: Record<string, SpriteInstance>
+  buildingTiles: Record<string, BuildingTile>
   setRoomId: (id: string) => void
   placeSprite: (s: SpriteInstance) => void
   moveSprite: (instanceId: string, col: number, row: number) => void
@@ -14,12 +15,16 @@ interface RoomStore {
   setHidden: (instanceId: string, hidden: boolean) => void
   removeSprite: (instanceId: string) => void
   loadSnapshot: (sprites: SpriteInstance[]) => void
+  placeTile: (t: BuildingTile) => void
+  removeTile: (instanceId: string) => void
+  loadBuildingSnapshot: (tiles: BuildingTile[]) => void
   reset: () => void
 }
 
 export const useRoomStore = create<RoomStore>((set) => ({
   roomId: null,
   sprites: {},
+  buildingTiles: {},
   setRoomId: (id) => set({ roomId: id }),
   placeSprite: (s) => set((state) => ({ sprites: { ...state.sprites, [s.instanceId]: s } })),
   moveSprite: (instanceId, col, row) =>
@@ -62,5 +67,14 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   loadSnapshot: (sprites) =>
     set({ sprites: Object.fromEntries(sprites.map((s) => [s.instanceId, s])) }),
-  reset: () => set({ roomId: null, sprites: {} }),
+  placeTile: (t) => set((state) => ({ buildingTiles: { ...state.buildingTiles, [t.instanceId]: t } })),
+  removeTile: (instanceId) =>
+    set((state) => {
+      const next = { ...state.buildingTiles }
+      delete next[instanceId]
+      return { buildingTiles: next }
+    }),
+  loadBuildingSnapshot: (tiles) =>
+    set({ buildingTiles: Object.fromEntries(tiles.map((t) => [t.instanceId, t])) }),
+  reset: () => set({ roomId: null, sprites: {}, buildingTiles: {} }),
 }))
