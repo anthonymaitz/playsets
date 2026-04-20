@@ -4,7 +4,23 @@
       "id": "structures",
       "label": "Structures",
       "props": [
-        { "id": "door-wood", "label": "Wooden Door", "theme": "structures" }
+        { "id": "door-wood", "label": "Wooden Door", "theme": "structures", "category": "punch-through" },
+        { "id": "window-wood", "label": "Wooden Window", "theme": "structures", "category": "punch-through" }
+      ]
+    },
+    {
+      "id": "decor",
+      "label": "Decor",
+      "props": [
+        { "id": "painting", "label": "Painting", "theme": "decor", "category": "wall-decor" }
+      ]
+    },
+    {
+      "id": "furniture",
+      "label": "Furniture",
+      "props": [
+        { "id": "rug", "label": "Rug", "theme": "furniture", "category": "floor-decor" },
+        { "id": "bartop", "label": "Bar Top", "theme": "furniture", "category": "floor-object" }
       ]
     }
   ]
