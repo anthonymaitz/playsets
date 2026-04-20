@@ -49,18 +49,14 @@ export function SpritePicker({ selectedSpriteId, onSelect, onDeselect, activeWea
 
   if (fetchError) {
     return (
-      <div style={{ position: 'fixed', top: 48, left: 0, bottom: 0, width: 200, background: '#1a1a22', borderRight: '1px solid #333', padding: 16, color: '#e74c3c', fontSize: 13, zIndex: 40 }}>
+      <div style={{ padding: 16, color: '#e74c3c', fontSize: 13 }}>
         Failed to load sprites
       </div>
     )
   }
 
   return (
-    <div style={{
-      position: 'fixed', top: 48, left: 0, bottom: 0, width: 200,
-      background: '#1a1a22', borderRight: '1px solid #333',
-      overflowY: 'auto', padding: 8, zIndex: 40,
-    }}>
+    <div style={{ padding: 8 }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 4px', marginBottom: 5 }}>
           Weather
