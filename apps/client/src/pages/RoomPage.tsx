@@ -48,6 +48,12 @@ function isWallCell(col: number, row: number): boolean {
   )
 }
 
+function isFloorCell(col: number, row: number): boolean {
+  return Object.values(useRoomStore.getState().buildingTiles).some(
+    (t) => t.col === col && t.row === row && t.tileId.includes('floor'),
+  )
+}
+
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const [searchParams] = useSearchParams()
@@ -101,6 +107,7 @@ export function RoomPage() {
   const selectedPropRef = useRef<PropManifestEntry | null>(null)
   const propManagerRef = useRef<PropManager | null>(null)
   const propModeRef = useRef(false)
+  const propDragRef = useRef<{ instanceId: string; lastCol: number; lastRow: number } | null>(null)
 
   const sprites = useRoomStore((s) => s.sprites)
 
@@ -192,6 +199,20 @@ export function RoomPage() {
     setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker, buildingModeRef)
 
     scene.onPointerObservable.add((info) => {
+      // Prop drag preview (move meshes live as host drags a placed prop)
+      if (info.type === PointerEventTypes.POINTERMOVE && propDragRef.current) {
+        const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+        if (pick?.hit && pick.pickedPoint) {
+          const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+          const drag = propDragRef.current
+          if (col !== drag.lastCol || row !== drag.lastRow) {
+            propManagerRef.current?.move(drag.instanceId, col, row, buildingManagerRef.current!)
+            propDragRef.current = { ...drag, lastCol: col, lastRow: row }
+          }
+        }
+        return
+      }
+
       if (!buildingModeRef.current) return
       const bm = buildingManagerRef.current
       if (!bm) return
@@ -234,14 +255,31 @@ export function RoomPage() {
     const handlePointerUp = (e: PointerEvent) => {
       if (dragController.consumeJustDropped()) return
 
-      // Prop placement (host placing a selected prop on a wall tile)
+      // Prop drag commit (host releases dragged prop)
+      if (propDragRef.current) {
+        const { instanceId, lastCol, lastRow } = propDragRef.current
+        useRoomStore.getState().moveProp(instanceId, lastCol, lastRow)
+        sendMsg(sessionRef.current, { type: 'prop:move', instanceId, col: lastCol, row: lastRow })
+        propDragRef.current = null
+        return
+      }
+
+      // Prop placement (host placing a selected prop on a valid cell)
       if (isHost && propModeRef.current) {
         const selectedP = selectedPropRef.current
         if (selectedP) {
           const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
           if (pick?.hit && pick.pickedPoint) {
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-            if (buildingManagerRef.current?.isWallAt(col, row)) {
+            const isWall = buildingManagerRef.current?.isWallAt(col, row) ?? false
+            const isFloor = isFloorCell(col, row)
+            const cat = selectedP.category
+            const canPlace =
+              (cat === 'punch-through' && isWall) ||
+              (cat === 'wall-decor' && isWall) ||
+              (cat === 'floor-decor' && isFloor) ||
+              (cat === 'floor-object' && isFloor)
+            if (canPlace) {
               const newId = nanoid()
               const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false } }
               useRoomStore.getState().placeProp(prop)
@@ -249,28 +287,24 @@ export function RoomPage() {
               sendMsg(sessionRef.current, { type: 'prop:place', prop })
             }
           }
-          // Always deselect after any tap attempt (placed or not)
           setSelectedProp(null)
           selectedPropRef.current = null
           return
         }
       }
 
-      // Prop interaction (any player taps a cell with a prop)
+      // Prop interaction (any player taps a prop mesh directly)
       if (!buildingModeRef.current) {
-        const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
-        if (pick?.hit && pick.pickedPoint) {
-          const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-          const propId = propManagerRef.current?.getInstanceIdAt(col, row)
-          if (propId) {
-            const existing = useRoomStore.getState().builderProps[propId]
-            if (existing) {
-              const newState = { ...existing.state, open: !existing.state.open }
-              useRoomStore.getState().setPropState(propId, newState)
-              propManagerRef.current?.setState(propId, newState)
-              sendMsg(sessionRef.current, { type: 'prop:interact', instanceId: propId, state: newState })
-              return
-            }
+        const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => !!m.metadata?.propInstanceId)
+        if (pick?.hit && pick.pickedMesh?.metadata?.propInstanceId) {
+          const propId = pick.pickedMesh.metadata.propInstanceId as string
+          const existing = useRoomStore.getState().builderProps[propId]
+          if (existing && 'open' in existing.state) {
+            const newState = { ...existing.state, open: !existing.state.open }
+            useRoomStore.getState().setPropState(propId, newState)
+            propManagerRef.current?.setState(propId, newState)
+            sendMsg(sessionRef.current, { type: 'prop:interact', instanceId: propId, state: newState })
+            return
           }
         }
       }
@@ -317,7 +351,19 @@ export function RoomPage() {
       }
     }
 
+    const handlePointerDown = (_e: PointerEvent) => {
+      if (!isHost || propModeRef.current || buildingModeRef.current) return
+      const propPick = scene.pick(scene.pointerX, scene.pointerY, (m) => !!m.metadata?.propInstanceId)
+      if (propPick?.hit && propPick.pickedMesh?.metadata?.propInstanceId) {
+        const propInstanceId = propPick.pickedMesh.metadata.propInstanceId as string
+        const prop = useRoomStore.getState().builderProps[propInstanceId]
+        if (prop) {
+          propDragRef.current = { instanceId: propInstanceId, lastCol: prop.col, lastRow: prop.row }
+        }
+      }
+    }
     const canvas = canvasRef.current
+    canvas.addEventListener('pointerdown', handlePointerDown)
     canvas.addEventListener('pointerup', handlePointerUp)
     document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
@@ -325,6 +371,7 @@ export function RoomPage() {
     sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, propManagerRef.current!, cursorManager, setConnected)
 
     return () => {
+      canvas.removeEventListener('pointerdown', handlePointerDown)
       canvas.removeEventListener('pointerup', handlePointerUp)
       document.removeEventListener('pointerup', handleDocPointerUp)
       window.removeEventListener('keydown', handleKeyDown)

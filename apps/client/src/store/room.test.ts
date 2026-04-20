@@ -125,4 +125,16 @@ describe('useRoomStore — builderProps', () => {
     useRoomStore.getState().reset()
     expect(Object.keys(useRoomStore.getState().builderProps)).toHaveLength(0)
   })
+
+  it('moveProp updates col and row', () => {
+    const { placeProp, moveProp } = useRoomStore.getState()
+    const prop = { instanceId: 'p1', propId: 'door-wood', col: 1, row: 1, state: { open: false } }
+    placeProp(prop)
+    moveProp('p1', 3, 4)
+    expect(useRoomStore.getState().builderProps['p1']).toMatchObject({ col: 3, row: 4 })
+  })
+
+  it('moveProp ignores unknown instanceId', () => {
+    expect(() => useRoomStore.getState().moveProp('ghost', 0, 0)).not.toThrow()
+  })
 })
