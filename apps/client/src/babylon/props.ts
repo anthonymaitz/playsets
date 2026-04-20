@@ -30,7 +30,7 @@ export class PropManager {
     frameMeshes.push(header, leftJamb, rightJamb)
 
     const panel = this.makeBox(`prop-panel-${prop.instanceId}`, 0.7, 1.35, 0.08, x, 0.675, z, PANEL_COLOR)
-    panel.isVisible = !prop.state.open
+    panel.isVisible = prop.state.open !== true
 
     this.entries.set(prop.instanceId, { prop, frameMeshes, panel })
   }
