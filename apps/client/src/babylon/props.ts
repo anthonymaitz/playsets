@@ -84,7 +84,6 @@ export class PropManager {
     for (const m of allMeshes) {
       m.metadata = { propInstanceId: prop.instanceId }
     }
-    if (panel) panel.metadata = { propInstanceId: prop.instanceId }
 
     this.entries.set(prop.instanceId, { prop, category, allMeshes, panel })
   }
