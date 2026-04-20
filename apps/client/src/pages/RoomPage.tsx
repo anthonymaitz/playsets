@@ -3,8 +3,9 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { PointerEventTypes, Vector3, Matrix } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera } from '@babylonjs/core'
 import { BuildingManager } from '../babylon/buildings'
-import { BuildingPalette } from '../components/BuildingPalette'
+import { PropManager } from '../babylon/props'
 import { BuildingControls } from '../components/BuildingControls'
+import { Sidebar } from '../components/Sidebar'
 import type { ScreenCorners } from '../components/BuildingControls'
 import { normalizeRect } from '../babylon/buildingUtils'
 import { createScene } from '../babylon/scene'
@@ -17,7 +18,6 @@ import { showEmote } from '../babylon/emotes'
 import { HostSession } from '../networking/host'
 import { GuestSession } from '../networking/guest'
 import { TopBar } from '../components/TopBar'
-import { SpritePicker } from '../components/SpritePicker'
 import { DirectionPicker } from '../components/DirectionPicker'
 import { JoinDialog } from '../components/JoinDialog'
 import { TokenMenu } from '../components/token-menu/TokenMenu'
@@ -25,6 +25,7 @@ import { TokenHUD } from '../components/TokenHUD'
 import { usePlayersStore } from '../store/players'
 import { useRoomStore } from '../store/room'
 import type { SpriteManifestEntry, FacingDir, WeatherType, BackgroundType } from '../types'
+import type { PropManifestEntry, TileManifestEntry } from '../types'
 import type { Mesh } from '@babylonjs/core'
 import { nanoid } from 'nanoid'
 
@@ -85,7 +86,7 @@ export function RoomPage() {
   const [tokenMenu, setTokenMenu] = useState<TokenMenuState | null>(null)
   const [directionPicker, setDirectionPicker] = useState<{ instanceId: string; x: number; y: number } | null>(null)
   const [connected, setConnected] = useState(isHost)
-  const [canvasRect, setCanvasRect] = useState({ left: 200, top: 48 })
+  const [canvasRect, setCanvasRect] = useState({ left: 268, top: 48 })
   const [currentWeather, setCurrentWeather] = useState<WeatherType>('sunny')
   const [currentBackground, setCurrentBackground] = useState<BackgroundType>('grass')
   const [cameraAlpha, setCameraAlpha] = useState(-Math.PI / 4)
@@ -95,6 +96,11 @@ export function RoomPage() {
   const [floorTileId, setFloorTileId] = useState('floor-dirt')
   const [mergeMode, setMergeMode] = useState<'open' | 'walled'>('open')
   const [screenCorners, setScreenCorners] = useState<ScreenCorners | null>(null)
+  const [selectedProp, setSelectedProp] = useState<PropManifestEntry | null>(null)
+  const [tiles, setTiles] = useState<TileManifestEntry[]>([])
+  const selectedPropRef = useRef<PropManifestEntry | null>(null)
+  const propManagerRef = useRef<PropManager | null>(null)
+  const propModeRef = useRef(false)
 
   const sprites = useRoomStore((s) => s.sprites)
 
@@ -134,6 +140,14 @@ export function RoomPage() {
   useEffect(() => { wallTileIdRef.current = wallTileId }, [wallTileId])
   useEffect(() => { floorTileIdRef.current = floorTileId }, [floorTileId])
   useEffect(() => { mergeModeRef.current = mergeMode }, [mergeMode])
+  useEffect(() => { propModeRef.current = selectedProp !== null }, [selectedProp])
+
+  useEffect(() => {
+    fetch('/assets/tiles/manifest.json')
+      .then((r) => r.json())
+      .then((data: { tiles: TileManifestEntry[] }) => setTiles(data.tiles))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (needsName || !canvasRef.current) return
@@ -148,6 +162,7 @@ export function RoomPage() {
     const spriteManager = new SpriteManager(scene, camera, isHost)
     spriteManagerRef.current = spriteManager
     buildingManagerRef.current = new BuildingManager(scene)
+    propManagerRef.current = new PropManager(scene)
     const weatherSystem = new WeatherSystem(scene, ground, ambientLight, camera)
     weatherSystemRef.current = weatherSystem
     weatherSystem.setWeather('sunny')
@@ -219,6 +234,46 @@ export function RoomPage() {
     const handlePointerUp = (e: PointerEvent) => {
       if (dragController.consumeJustDropped()) return
 
+      // Prop placement (host placing a selected prop on a wall tile)
+      if (isHost && propModeRef.current) {
+        const selectedP = selectedPropRef.current
+        if (selectedP) {
+          const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+          if (pick?.hit && pick.pickedPoint) {
+            const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+            if (buildingManagerRef.current?.isWallAt(col, row)) {
+              const newId = nanoid()
+              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false } }
+              useRoomStore.getState().placeProp(prop)
+              propManagerRef.current?.place(prop, buildingManagerRef.current!)
+              sendMsg(sessionRef.current, { type: 'prop:place', prop })
+              setSelectedProp(null)
+              selectedPropRef.current = null
+            }
+          }
+          return
+        }
+      }
+
+      // Prop interaction (any player taps a cell with a prop)
+      if (!buildingModeRef.current) {
+        const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+        if (pick?.hit && pick.pickedPoint) {
+          const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+          const propId = propManagerRef.current?.getInstanceIdAt(col, row)
+          if (propId) {
+            const existing = useRoomStore.getState().builderProps[propId]
+            if (existing) {
+              const newState = { ...existing.state, open: !existing.state.open }
+              useRoomStore.getState().setPropState(propId, newState)
+              propManagerRef.current?.setState(propId, newState)
+              sendMsg(sessionRef.current, { type: 'prop:interact', instanceId: propId, state: newState })
+              return
+            }
+          }
+        }
+      }
+
       const sprite = selectedSpriteRef.current
       if (!sprite) return
 
@@ -266,7 +321,7 @@ export function RoomPage() {
     document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
 
-    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, cursorManager, setConnected)
+    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, propManagerRef.current!, cursorManager, setConnected)
 
     return () => {
       canvas.removeEventListener('pointerup', handlePointerUp)
@@ -278,6 +333,8 @@ export function RoomPage() {
       bgCleanupRef.current = () => {}
       buildingManagerRef.current?.dispose()
       buildingManagerRef.current = null
+      propManagerRef.current?.dispose()
+      propManagerRef.current = null
       weatherSystemRef.current?.dispose()
       weatherSystemRef.current = null
       spriteManagerRef.current = null
@@ -425,18 +482,40 @@ export function RoomPage() {
   return (
     <>
       <TopBar />
-      <SpritePicker
+      <Sidebar
+        isHost={isHost}
         selectedSpriteId={selectedSprite?.id ?? null}
-        onSelect={handleSelectSprite}
-        onDeselect={handleDeselectSprite}
+        onSpriteSelect={handleSelectSprite}
+        onSpriteDeselect={handleDeselectSprite}
         activeWeather={currentWeather}
         onWeatherChange={handleWeatherChange}
         activeBackground={currentBackground}
         onBackgroundChange={handleBackgroundChange}
+        onBuildingModeChange={(active) => {
+          setBuildingMode(active)
+          if (!active) {
+            buildingManagerRef.current?.cancelPreview()
+            previewEndRef.current = null
+          }
+        }}
+        buildPanel={{
+          wallTileId,
+          floorTileId,
+          buildMode,
+          mergeMode,
+          tiles,
+          onWallSelect: (id) => { setWallTileId(id); wallTileIdRef.current = id },
+          onFloorSelect: (id) => { setFloorTileId(id); floorTileIdRef.current = id },
+          onBuildModeChange: (m) => { setBuildMode(m); buildModeRef.current = m },
+          onMergeModeChange: (m) => { setMergeMode(m); mergeModeRef.current = m },
+        }}
+        selectedPropId={selectedProp?.id ?? null}
+        onPropSelect={(entry) => { setSelectedProp(entry); selectedPropRef.current = entry }}
+        onPropDeselect={() => { setSelectedProp(null); selectedPropRef.current = null }}
       />
       <canvas
         ref={canvasRef}
-        style={{ position: 'fixed', top: 48, left: 200, right: 0, bottom: 0, width: 'calc(100vw - 200px)', height: 'calc(100vh - 48px)' }}
+        style={{ position: 'fixed', top: 48, left: 268, right: 0, bottom: 0, width: 'calc(100vw - 268px)', height: 'calc(100vh - 48px)' }}
       />
       <TokenHUD scene={sceneRef.current} canvasLeft={canvasRect.left} canvasTop={canvasRect.top} />
       {tokenMenu && activeSprite && (
@@ -490,46 +569,8 @@ export function RoomPage() {
           onDismiss={() => setDirectionPicker(null)}
         />
       )}
-      {isHost && (
-        <button
-          onClick={() => {
-            setBuildingMode((prev) => {
-              if (prev) {
-                buildingManagerRef.current?.cancelPreview()
-                previewEndRef.current = null
-              }
-              return !prev
-            })
-          }}
-          style={{
-            position: 'fixed',
-            left: 8,
-            bottom: 8,
-            width: 36,
-            height: 36,
-            borderRadius: 6,
-            border: 'none',
-            cursor: 'pointer',
-            background: buildingMode ? '#c8893a' : 'rgba(255,255,255,0.08)',
-            boxShadow: buildingMode ? '0 0 8px rgba(200,137,58,0.5)' : 'none',
-            fontSize: 16,
-            zIndex: 50,
-          }}
-          title="Building Tools"
-        >
-          🏠
-        </button>
-      )}
       {buildingMode && (
         <>
-          <BuildingPalette
-            wallTileId={wallTileId}
-            floorTileId={floorTileId}
-            mode={buildMode}
-            onWallSelect={setWallTileId}
-            onFloorSelect={setFloorTileId}
-            onModeChange={setBuildMode}
-          />
           <BuildingControls
             corners={screenCorners}
             mergeMode={mergeMode}
@@ -646,11 +687,12 @@ function createSession(
   scene: Scene,
   spriteManager: SpriteManager,
   buildingManager: BuildingManager,
+  propManager: PropManager,
   cursorManager: CursorManager,
   setConnected: (v: boolean) => void,
 ): HostSession | GuestSession | null {
   if (isHost) {
-    return new HostSession(scene, spriteManager, buildingManager, cursorManager, (newRoomId) => {
+    return new HostSession(scene, spriteManager, buildingManager, propManager, cursorManager, (newRoomId) => {
       window.history.replaceState(null, '', `/room/${newRoomId}`)
       useRoomStore.getState().setRoomId(newRoomId)
     })
@@ -661,6 +703,7 @@ function createSession(
       scene,
       spriteManager,
       buildingManager,
+      propManager,
       cursorManager,
       () => setConnected(true),
       () => alert('Host disconnected'),
