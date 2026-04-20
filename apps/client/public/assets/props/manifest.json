@@ -1,0 +1,11 @@
+{
+  "themes": [
+    {
+      "id": "structures",
+      "label": "Structures",
+      "props": [
+        { "id": "door-wood", "label": "Wooden Door", "theme": "structures" }
+      ]
+    }
+  ]
+}
