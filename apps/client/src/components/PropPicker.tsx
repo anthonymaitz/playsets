@@ -10,16 +10,21 @@ interface Props {
 export function PropPicker({ selectedPropId, onSelect, onDeselect }: Props) {
   const [manifest, setManifest] = useState<PropManifest | null>(null)
   const [themeIndex, setThemeIndex] = useState(0)
+  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
     fetch('/assets/props/manifest.json')
       .then((r) => r.json())
       .then(setManifest)
-      .catch(() => {})
+      .catch(() => setFetchError(true))
   }, [])
 
   const themes: PropTheme[] = manifest?.themes ?? []
   const theme = themes[themeIndex]
+
+  if (fetchError) return (
+    <div style={{ padding: 12, color: '#e74c3c', fontSize: 12 }}>Failed to load props</div>
+  )
 
   if (!theme) return (
     <div style={{ padding: 12, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>No props loaded</div>

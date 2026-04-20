@@ -26,7 +26,6 @@ interface Props {
   onWeatherChange: (w: WeatherType) => void
   activeBackground: BackgroundType
   onBackgroundChange: (b: BackgroundType) => void
-  buildingMode: boolean
   onBuildingModeChange: (active: boolean) => void
   buildPanel: BuildPanelProps
   selectedPropId: string | null
@@ -43,7 +42,6 @@ export function Sidebar({
   onWeatherChange,
   activeBackground,
   onBackgroundChange,
-  buildingMode: _buildingMode,
   onBuildingModeChange,
   buildPanel,
   selectedPropId,
