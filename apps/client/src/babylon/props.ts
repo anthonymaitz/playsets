@@ -171,32 +171,39 @@ export class PropManager {
     return { allMeshes: [header, leftJamb, rightJamb, panel], panel }
   }
 
-  /** window-wood — punch-through */
+  /** window-wood — punch-through, fills full wall cell slot with opening + glass */
   private placeWindow(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[]; panel: Mesh } {
     const id = prop.instanceId
-    const leftJamb  = this.makeBox(`prop-wljamb-${id}`, 0.1,  0.8,  0.1,  x - 0.4, 0.85, z, FRAME_COLOR)
-    const rightJamb = this.makeBox(`prop-wrjamb-${id}`, 0.1,  0.8,  0.1,  x + 0.4, 0.85, z, FRAME_COLOR)
-    const topRail   = this.makeBox(`prop-wtop-${id}`,   0.9,  0.1,  0.1,  x,        1.25, z, FRAME_COLOR)
-    const botSill   = this.makeBox(`prop-wsill-${id}`,  0.9,  0.1,  0.1,  x,        0.45, z, FRAME_COLOR)
-    const glass     = this.makeBox(`prop-wglass-${id}`, 0.75, 0.7,  0.05, x,        0.85, z, GLASS_COLOR, 0.5)
+    // Side pillars fill full cell height, blending with surrounding walls
+    const leftPillar  = this.makeBox(`prop-wlp-${id}`,   0.15, 1.6,  0.15, x - 0.425, 0.8,  z, FRAME_COLOR)
+    const rightPillar = this.makeBox(`prop-wrp-${id}`,   0.15, 1.6,  0.15, x + 0.425, 0.8,  z, FRAME_COLOR)
+    // Top and bottom fills close the wall slot above/below the opening
+    const topFill     = this.makeBox(`prop-wtf-${id}`,   0.7,  0.5,  0.15, x,          1.35, z, FRAME_COLOR)
+    const botFill     = this.makeBox(`prop-wbf-${id}`,   0.7,  0.4,  0.15, x,          0.2,  z, FRAME_COLOR)
+    // Sill at bottom of opening
+    const sill        = this.makeBox(`prop-wsill-${id}`, 0.72, 0.06, 0.12, x,          0.43, z, new Color3(0.55, 0.34, 0.16))
+    // Glass pane in the opening (hidden when open)
+    const glass       = this.makeBox(`prop-wglass-${id}`, 0.66, 0.6, 0.04, x,          0.76, z, GLASS_COLOR, 0.5)
     glass.isVisible = prop.state.open !== true
-    return { allMeshes: [leftJamb, rightJamb, topRail, botSill, glass], panel: glass }
+    return { allMeshes: [leftPillar, rightPillar, topFill, botFill, sill, glass], panel: glass }
   }
 
-  /** painting — wall-decor (z offset -0.08 to sit on wall face) */
+  /** painting — wall-decor; rendered just outside wall's near face (z - 0.52) */
   private placePainting(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[] } {
     const id = prop.instanceId
-    const wz = z - 0.08   // sit on wall face
-    const canvas = this.makeBox(`prop-canvas-${id}`, 0.6,  0.4,  0.05, x, 1.0, wz - 0.00, CANVAS_COLOR)
-    const inner  = this.makeBox(`prop-art-${id}`,    0.48, 0.28, 0.06, x, 1.0, wz - 0.01, ART_COLOR)
+    // Wall box near face is at z - 0.5; offset just outside so depth test passes
+    const wz = z - 0.52
+    const canvas = this.makeBox(`prop-canvas-${id}`, 0.6,  0.4,  0.04, x, 1.0, wz,        CANVAS_COLOR, 1, true)
+    const inner  = this.makeBox(`prop-art-${id}`,    0.48, 0.28, 0.05, x, 1.0, wz - 0.01, ART_COLOR,    1, true)
     return { allMeshes: [canvas, inner] }
   }
 
   /** rug — floor-decor */
   private placeRug(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[] } {
-    const id  = prop.instanceId
-    const rug = this.makeBox(`prop-rug-${id}`, 0.9, 0.05, 0.9, x, 0.025, z, RUG_COLOR)
-    return { allMeshes: [rug] }
+    const id     = prop.instanceId
+    const base   = this.makeBox(`prop-rug-${id}`,       0.92, 0.08, 0.92, x, 0.04, z, RUG_COLOR)
+    const center = this.makeBox(`prop-rug-ctr-${id}`,   0.66, 0.09, 0.66, x, 0.045, z, new Color3(0.75, 0.3, 0.35))
+    return { allMeshes: [base, center] }
   }
 
   /** bartop — floor-object */
@@ -216,6 +223,7 @@ export class PropManager {
     x: number, y: number, z: number,
     color: Color3,
     alpha = 1,
+    twoSided = false,
   ): Mesh {
     const mesh = MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, this.scene)
     mesh.position.set(x, y, z)
@@ -224,6 +232,7 @@ export class PropManager {
     mat.diffuseColor  = color
     mat.emissiveColor = color.scale(0.3)
     mat.alpha         = alpha
+    if (twoSided) mat.backFaceCulling = false
     mesh.material = mat
     return mesh
   }
