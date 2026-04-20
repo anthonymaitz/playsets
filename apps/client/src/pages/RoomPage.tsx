@@ -245,7 +245,7 @@ export function RoomPage() {
               const newId = nanoid()
               const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false } }
               useRoomStore.getState().placeProp(prop)
-              propManagerRef.current?.place(prop, buildingManagerRef.current!)
+              propManagerRef.current?.place(prop, selectedP.category, buildingManagerRef.current!)
               sendMsg(sessionRef.current, { type: 'prop:place', prop })
             }
           }

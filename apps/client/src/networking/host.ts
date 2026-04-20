@@ -7,7 +7,7 @@ import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
-import type { PropManager } from '../babylon/props'
+import { type PropManager, getPropCategory } from '../babylon/props'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
 
@@ -157,7 +157,7 @@ export class HostSession {
       }
       case 'prop:place': {
         useRoomStore.getState().placeProp(msg.prop)
-        this.propManager.place(msg.prop, this.buildingManager)
+        this.propManager.place(msg.prop, getPropCategory(msg.prop.propId), this.buildingManager)
         break
       }
       case 'prop:remove': {
