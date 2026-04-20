@@ -6,6 +6,7 @@ import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
+import type { PropManager } from '../babylon/props'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
 
@@ -20,6 +21,7 @@ export class GuestSession {
     private scene: Scene,
     private spriteManager: SpriteManager,
     private buildingManager: BuildingManager,
+    private propManager: PropManager,
     private cursorManager: CursorManager,
     onConnected: () => void,
     onHostDisconnected: () => void,
@@ -155,6 +157,26 @@ export class GuestSession {
       case 'building:snapshot': {
         useRoomStore.getState().loadBuildingSnapshot(msg.tiles)
         this.buildingManager.loadSnapshot(msg.tiles)
+        break
+      }
+      case 'prop:place': {
+        useRoomStore.getState().placeProp(msg.prop)
+        this.propManager.place(msg.prop, this.buildingManager)
+        break
+      }
+      case 'prop:remove': {
+        useRoomStore.getState().removeProp(msg.instanceId)
+        this.propManager.remove(msg.instanceId, this.buildingManager)
+        break
+      }
+      case 'prop:interact': {
+        useRoomStore.getState().setPropState(msg.instanceId, msg.state)
+        this.propManager.setState(msg.instanceId, msg.state)
+        break
+      }
+      case 'prop:snapshot': {
+        useRoomStore.getState().loadPropSnapshot(msg.props)
+        this.propManager.loadSnapshot(msg.props, this.buildingManager)
         break
       }
     }

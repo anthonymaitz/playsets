@@ -1,12 +1,13 @@
 import { SignalingClient } from './signaling'
 import { PeerConnection } from './peer'
-import { broadcastReliable, sendSnapshot, sendBuildingSnapshot } from './messages'
+import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot } from './messages'
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
 import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
+import type { PropManager } from '../babylon/props'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
 
@@ -19,6 +20,7 @@ export class HostSession {
     private scene: Scene,
     private spriteManager: SpriteManager,
     private buildingManager: BuildingManager,
+    private propManager: PropManager,
     _cursorManager: CursorManager,
     onRoomCreated: (roomId: string) => void,
   ) {
@@ -45,9 +47,11 @@ export class HostSession {
     this.signaling.createRoom(this.currentRoomId).then(() => {
       const { sprites, buildingTiles } = useRoomStore.getState()
       const { players, localPlayer } = usePlayersStore.getState()
+      const { builderProps } = useRoomStore.getState()
       for (const peer of this.peers.values()) {
         sendSnapshot(peer, Object.values(sprites), [localPlayer, ...players])
         sendBuildingSnapshot(peer, Object.values(buildingTiles))
+        sendPropSnapshot(peer, Object.values(builderProps))
       }
     }).catch((err: unknown) => {
       console.error('Failed to re-register room after reconnect:', err)
@@ -64,6 +68,8 @@ export class HostSession {
         sendSnapshot(peer, Object.values(sprites), [localPlayer, ...players])
         const { buildingTiles } = useRoomStore.getState()
         sendBuildingSnapshot(peer, Object.values(buildingTiles))
+        const { builderProps } = useRoomStore.getState()
+        sendPropSnapshot(peer, Object.values(builderProps))
       },
       onDisconnected: () => this.handleGuestLeft(guestSocketId),
     })
@@ -146,6 +152,25 @@ export class HostSession {
         break
       }
       case 'building:snapshot': {
+        // Host never receives a snapshot — ignore defensively
+        break
+      }
+      case 'prop:place': {
+        useRoomStore.getState().placeProp(msg.prop)
+        this.propManager.place(msg.prop, this.buildingManager)
+        break
+      }
+      case 'prop:remove': {
+        useRoomStore.getState().removeProp(msg.instanceId)
+        this.propManager.remove(msg.instanceId, this.buildingManager)
+        break
+      }
+      case 'prop:interact': {
+        useRoomStore.getState().setPropState(msg.instanceId, msg.state)
+        this.propManager.setState(msg.instanceId, msg.state)
+        break
+      }
+      case 'prop:snapshot': {
         // Host never receives a snapshot — ignore defensively
         break
       }
