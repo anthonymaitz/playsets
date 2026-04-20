@@ -73,3 +73,56 @@ describe('useRoomStore — building tiles', () => {
     expect(Object.keys(useRoomStore.getState().buildingTiles)).toHaveLength(0)
   })
 })
+
+describe('useRoomStore — builderProps', () => {
+  const sampleProp = { instanceId: 'p1', propId: 'door-wood', col: 2, row: 3, state: { open: false } }
+
+  beforeEach(() => {
+    useRoomStore.getState().reset()
+  })
+
+  it('starts with empty builderProps', () => {
+    expect(Object.keys(useRoomStore.getState().builderProps)).toHaveLength(0)
+  })
+
+  it('placeProp adds a prop keyed by instanceId', () => {
+    useRoomStore.getState().placeProp(sampleProp)
+    expect(useRoomStore.getState().builderProps['p1']).toMatchObject({ propId: 'door-wood', col: 2, row: 3 })
+  })
+
+  it('removeProp removes a prop by instanceId', () => {
+    useRoomStore.getState().placeProp(sampleProp)
+    useRoomStore.getState().placeProp({ instanceId: 'p2', propId: 'window-wood', col: 5, row: 6, state: {} })
+    useRoomStore.getState().removeProp('p1')
+    expect(useRoomStore.getState().builderProps['p1']).toBeUndefined()
+    expect(useRoomStore.getState().builderProps['p2']).toBeDefined()
+  })
+
+  it('setPropState updates state for an existing prop', () => {
+    useRoomStore.getState().placeProp(sampleProp)
+    useRoomStore.getState().setPropState('p1', { open: true })
+    expect(useRoomStore.getState().builderProps['p1'].state).toEqual({ open: true })
+  })
+
+  it('setPropState does nothing for unknown instanceId', () => {
+    useRoomStore.getState().placeProp(sampleProp)
+    useRoomStore.getState().setPropState('unknown', { open: true })
+    expect(useRoomStore.getState().builderProps['p1'].state).toEqual({ open: false })
+  })
+
+  it('loadPropSnapshot replaces all props', () => {
+    useRoomStore.getState().placeProp(sampleProp)
+    useRoomStore.getState().loadPropSnapshot([
+      { instanceId: 'p10', propId: 'chest-wood', col: 1, row: 1, state: { locked: true } },
+    ])
+    expect(useRoomStore.getState().builderProps['p1']).toBeUndefined()
+    expect(useRoomStore.getState().builderProps['p10']).toBeDefined()
+    expect(Object.keys(useRoomStore.getState().builderProps)).toHaveLength(1)
+  })
+
+  it('reset clears builderProps', () => {
+    useRoomStore.getState().placeProp(sampleProp)
+    useRoomStore.getState().reset()
+    expect(Object.keys(useRoomStore.getState().builderProps)).toHaveLength(0)
+  })
+})
