@@ -11,6 +11,7 @@ export class BuildingManager {
   private textureCache = new Map<string, Texture>()
   private previewMeshes: Mesh[] = []
   private previewStartCell: { col: number; row: number } | null = null
+  private wallPosTileId = new Map<string, string>()
 
   constructor(private scene: Scene) {}
 
@@ -64,16 +65,40 @@ export class BuildingManager {
 
   placeTile(tile: BuildingTile, path: string): void {
     if (this.meshes.has(tile.instanceId)) return
+    if (path.includes('wall')) {
+      this.wallPosTileId.set(`${tile.col},${tile.row}`, tile.instanceId)
+    }
     this.meshes.set(tile.instanceId, this.createTilePlane(tile.instanceId, tile.col, tile.row, path))
   }
 
   removeTile(instanceId: string): void {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
+    for (const [posKey, id] of this.wallPosTileId) {
+      if (id === instanceId) { this.wallPosTileId.delete(posKey); break }
+    }
     const mat = mesh.material
     mesh.dispose()
     mat?.dispose()
     this.meshes.delete(instanceId)
+  }
+
+  hideWallAt(col: number, row: number): void {
+    const id = this.wallPosTileId.get(`${col},${row}`)
+    if (!id) return
+    const mesh = this.meshes.get(id)
+    if (mesh) mesh.isVisible = false
+  }
+
+  showWallAt(col: number, row: number): void {
+    const id = this.wallPosTileId.get(`${col},${row}`)
+    if (!id) return
+    const mesh = this.meshes.get(id)
+    if (mesh) mesh.isVisible = true
+  }
+
+  isWallAt(col: number, row: number): boolean {
+    return this.wallPosTileId.has(`${col},${row}`)
   }
 
   loadSnapshot(tiles: BuildingTile[]): void {
@@ -92,6 +117,7 @@ export class BuildingManager {
       mat?.dispose()
     }
     this.meshes.clear()
+    this.wallPosTileId.clear()
   }
 
   beginPreview(col: number, row: number): void {
