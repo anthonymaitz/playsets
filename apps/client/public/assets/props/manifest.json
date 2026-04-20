@@ -5,7 +5,7 @@
       "label": "Structures",
       "props": [
         { "id": "door-wood", "label": "Wooden Door", "theme": "structures", "category": "punch-through" },
-        { "id": "window-wood", "label": "Wooden Window", "theme": "structures", "category": "punch-through" }
+        { "id": "window-wood", "label": "Wooden Window", "theme": "structures", "category": "wall-decor" }
       ]
     },
     {

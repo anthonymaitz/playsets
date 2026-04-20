@@ -17,7 +17,7 @@ const METAL_COLOR   = new Color3(0.2,  0.2,  0.2)    // foot rail
 // ── Category lookup ───────────────────────────────────────────────────────────
 const PROP_CATEGORIES: Record<string, PropCategory> = {
   'door-wood':   'punch-through',
-  'window-wood': 'punch-through',
+  'window-wood': 'wall-decor',   // wall stays visible — frame overlays it
   'painting':    'wall-decor',
   'rug':         'floor-decor',
   'bartop':      'floor-object',
@@ -59,7 +59,7 @@ export class PropManager {
 
       case 'window-wood':
         ;({ allMeshes, panel } = this.placeWindow(prop, x, z))
-        buildingManager.hideWallAt(prop.col, prop.row)
+        // wall-decor: wall stays visible, frame overlays exterior face
         break
 
       case 'painting':
@@ -171,21 +171,18 @@ export class PropManager {
     return { allMeshes: [header, leftJamb, rightJamb, panel], panel }
   }
 
-  /** window-wood — punch-through, fills full wall cell slot with opening + glass */
+  /** window-wood — wall-decor; frame overlays wall exterior face (wall stays visible) */
   private placeWindow(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[]; panel: Mesh } {
     const id = prop.instanceId
-    // Side pillars fill full cell height, blending with surrounding walls
-    const leftPillar  = this.makeBox(`prop-wlp-${id}`,   0.15, 1.6,  0.15, x - 0.425, 0.8,  z, FRAME_COLOR)
-    const rightPillar = this.makeBox(`prop-wrp-${id}`,   0.15, 1.6,  0.15, x + 0.425, 0.8,  z, FRAME_COLOR)
-    // Top and bottom fills close the wall slot above/below the opening
-    const topFill     = this.makeBox(`prop-wtf-${id}`,   0.7,  0.5,  0.15, x,          1.35, z, FRAME_COLOR)
-    const botFill     = this.makeBox(`prop-wbf-${id}`,   0.7,  0.4,  0.15, x,          0.2,  z, FRAME_COLOR)
-    // Sill at bottom of opening
-    const sill        = this.makeBox(`prop-wsill-${id}`, 0.72, 0.06, 0.12, x,          0.43, z, new Color3(0.55, 0.34, 0.16))
-    // Glass pane in the opening (hidden when open)
-    const glass       = this.makeBox(`prop-wglass-${id}`, 0.66, 0.6, 0.04, x,          0.76, z, GLASS_COLOR, 0.5)
+    // fz = just outside wall's near exterior face (wall box front at z-0.5)
+    const fz = z - 0.52
+    const leftJamb  = this.makeBox(`prop-wlj-${id}`,  0.10, 0.82, 0.06, x - 0.33, 0.86, fz,       FRAME_COLOR, 1,   true)
+    const rightJamb = this.makeBox(`prop-wrj-${id}`,  0.10, 0.82, 0.06, x + 0.33, 0.86, fz,       FRAME_COLOR, 1,   true)
+    const topRail   = this.makeBox(`prop-wtr-${id}`,  0.80, 0.08, 0.06, x,         1.25, fz,       FRAME_COLOR, 1,   true)
+    const botSill   = this.makeBox(`prop-wbs-${id}`,  0.80, 0.10, 0.06, x,         0.47, fz,       FRAME_COLOR, 1,   true)
+    const glass     = this.makeBox(`prop-wgl-${id}`,  0.65, 0.74, 0.03, x,         0.86, fz - 0.01, GLASS_COLOR, 0.4, true)
     glass.isVisible = prop.state.open !== true
-    return { allMeshes: [leftPillar, rightPillar, topFill, botFill, sill, glass], panel: glass }
+    return { allMeshes: [leftJamb, rightJamb, topRail, botSill, glass], panel: glass }
   }
 
   /** painting — wall-decor; rendered just outside wall's near face (z - 0.52) */
