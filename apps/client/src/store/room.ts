@@ -23,6 +23,7 @@ interface RoomStore {
   removeProp: (instanceId: string) => void
   setPropState: (instanceId: string, state: Record<string, string | number | boolean>) => void
   loadPropSnapshot: (props: BuilderProp[]) => void
+  moveProp: (instanceId: string, col: number, row: number) => void
   reset: () => void
 }
 
@@ -101,5 +102,15 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   loadPropSnapshot: (props) =>
     set({ builderProps: Object.fromEntries(props.map((p) => [p.instanceId, p])) }),
+  moveProp: (instanceId, col, row) =>
+    set((store) => {
+      if (!store.builderProps[instanceId]) return store
+      return {
+        builderProps: {
+          ...store.builderProps,
+          [instanceId]: { ...store.builderProps[instanceId], col, row },
+        },
+      }
+    }),
   reset: () => set({ roomId: null, sprites: {}, buildingTiles: {}, builderProps: {} }),
 }))

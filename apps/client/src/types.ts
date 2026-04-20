@@ -63,10 +63,13 @@ export interface BuilderProp {
   state: Record<string, string | number | boolean>
 }
 
+export type PropCategory = 'punch-through' | 'wall-decor' | 'floor-decor' | 'floor-object'
+
 export interface PropManifestEntry {
   id: string
   label: string
   theme: string
+  category: PropCategory
 }
 
 export interface PropTheme {
@@ -101,3 +104,4 @@ export type GameMessage =
   | { type: 'prop:remove'; instanceId: string }
   | { type: 'prop:interact'; instanceId: string; state: Record<string, string | number | boolean> }
   | { type: 'prop:snapshot'; props: BuilderProp[] }
+  | { type: 'prop:move'; instanceId: string; col: number; row: number }
