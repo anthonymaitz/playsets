@@ -146,7 +146,7 @@ export function RoomPage() {
     fetch('/assets/tiles/manifest.json')
       .then((r) => r.json())
       .then((data: { tiles: TileManifestEntry[] }) => setTiles(data.tiles))
-      .catch(() => {})
+      .catch(() => { console.warn('Failed to load tile manifest') })
   }, [])
 
   useEffect(() => {
@@ -247,10 +247,11 @@ export function RoomPage() {
               useRoomStore.getState().placeProp(prop)
               propManagerRef.current?.place(prop, buildingManagerRef.current!)
               sendMsg(sessionRef.current, { type: 'prop:place', prop })
-              setSelectedProp(null)
-              selectedPropRef.current = null
             }
           }
+          // Always deselect after any tap attempt (placed or not)
+          setSelectedProp(null)
+          selectedPropRef.current = null
           return
         }
       }
