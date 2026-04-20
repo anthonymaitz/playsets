@@ -48,7 +48,7 @@ export class PropManager {
     const entry = this.entries.get(instanceId)
     if (!entry || !entry.panel) return
     entry.prop = { ...entry.prop, state }
-    entry.panel.isVisible = !state.open
+    entry.panel.isVisible = state.open !== true
   }
 
   loadSnapshot(props: BuilderProp[], buildingManager: BuildingManager): void {
