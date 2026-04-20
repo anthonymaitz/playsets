@@ -55,6 +55,30 @@ export interface TileManifestEntry {
   category: TileCategory
 }
 
+export interface BuilderProp {
+  instanceId: string
+  propId: string
+  col: number
+  row: number
+  state: Record<string, string | number | boolean>
+}
+
+export interface PropManifestEntry {
+  id: string
+  label: string
+  theme: string
+}
+
+export interface PropTheme {
+  id: string
+  label: string
+  props: PropManifestEntry[]
+}
+
+export interface PropManifest {
+  themes: PropTheme[]
+}
+
 export type GameMessage =
   | { type: 'state:snapshot'; sprites: SpriteInstance[]; players: Player[] }
   | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string }
@@ -73,3 +97,7 @@ export type GameMessage =
   | { type: 'building:place'; tile: BuildingTile }
   | { type: 'building:remove'; instanceId: string }
   | { type: 'building:snapshot'; tiles: BuildingTile[] }
+  | { type: 'prop:place'; prop: BuilderProp }
+  | { type: 'prop:remove'; instanceId: string }
+  | { type: 'prop:interact'; instanceId: string; state: Record<string, string | number | boolean> }
+  | { type: 'prop:snapshot'; props: BuilderProp[] }
