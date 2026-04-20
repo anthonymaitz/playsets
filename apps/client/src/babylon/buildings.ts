@@ -65,7 +65,7 @@ export class BuildingManager {
 
   placeTile(tile: BuildingTile, path: string): void {
     if (this.meshes.has(tile.instanceId)) return
-    if (path.includes('wall')) {
+    if (tile.tileId.includes('wall')) {
       this.wallPosTileId.set(`${tile.col},${tile.row}`, tile.instanceId)
     }
     this.meshes.set(tile.instanceId, this.createTilePlane(tile.instanceId, tile.col, tile.row, path))
