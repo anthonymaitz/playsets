@@ -1,4 +1,4 @@
-import { Scene, MeshBuilder, StandardMaterial, Color3, Mesh } from '@babylonjs/core'
+import { Scene, MeshBuilder, StandardMaterial, Color3, Mesh, TransformNode } from '@babylonjs/core'
 import type { BuilderProp, PropCategory } from '../types'
 import type { BuildingManager } from './buildings'
 import { cellToWorld } from './grid'
@@ -32,8 +32,9 @@ export function getPropCategory(propId: string): PropCategory {
 interface PropRenderEntry {
   prop: BuilderProp
   category: PropCategory
-  allMeshes: Mesh[]      // ALL meshes — used for dispose and move
-  panel: Mesh | null     // togglable mesh (door panel, window glass) or null
+  root: TransformNode   // all meshes are children; rotate root for wall orientation
+  allMeshes: Mesh[]     // for dispose and mesh picking
+  panel: Mesh | null    // togglable (door panel, window glass)
 }
 
 // ── Manager ──────────────────────────────────────────────────────────────────
@@ -48,44 +49,49 @@ export class PropManager {
     if (this.entries.has(prop.instanceId)) return
     const { x, z } = cellToWorld(prop.col, prop.row)
 
+    const root = new TransformNode(`prop-root-${prop.instanceId}`, this.scene)
+    root.position.set(x, -(prop.zOrder ?? 0) * 0.03, z)
+    // z-axis wall: west wall uses -90°, east wall uses +90°
+    if (prop.state.facing === 'west') root.rotation.y = -Math.PI / 2
+    else if (prop.state.facing === 'east') root.rotation.y = Math.PI / 2
+    // floor-object: ↘ = 90° rotation (long axis swap); floor-decor: ↘ = X-axis mirror
+    if (prop.state.mirrored) {
+      if (category === 'floor-object') root.rotation.y = Math.PI / 2
+      else root.scaling.x = -1
+    }
+
     let allMeshes: Mesh[] = []
     let panel: Mesh | null = null
 
     switch (prop.propId) {
       case 'door-wood':
-        ;({ allMeshes, panel } = this.placeDoor(prop, x, z))
+        ;({ allMeshes, panel } = this.placeDoor(prop))
         buildingManager.hideWallAt(prop.col, prop.row)
         break
-
       case 'window-wood':
-        ;({ allMeshes, panel } = this.placeWindow(prop, x, z))
-        // wall-decor: wall stays visible, frame overlays exterior face
+        ;({ allMeshes, panel } = this.placeWindow(prop))
         break
-
       case 'painting':
-        ;({ allMeshes } = this.placePainting(prop, x, z))
-        // wall-decor: wall stays visible
+        ;({ allMeshes } = this.placePainting(prop))
         break
-
       case 'rug':
-        ;({ allMeshes } = this.placeRug(prop, x, z))
+        ;({ allMeshes } = this.placeRug(prop))
         break
-
       case 'bartop':
-        ;({ allMeshes } = this.placeBartop(prop, x, z))
+        ;({ allMeshes } = this.placeBartop(prop))
         break
-
       default:
         console.warn(`[PropManager] Unknown propId: ${prop.propId}`)
+        root.dispose()
         return
     }
 
-    // Tag every mesh for picking
     for (const m of allMeshes) {
+      m.parent = root
       m.metadata = { propInstanceId: prop.instanceId }
     }
 
-    this.entries.set(prop.instanceId, { prop, category, allMeshes, panel })
+    this.entries.set(prop.instanceId, { prop, category, root, allMeshes, panel })
   }
 
   remove(instanceId: string, buildingManager: BuildingManager): void {
@@ -95,6 +101,7 @@ export class PropManager {
       buildingManager.showWallAt(entry.prop.col, entry.prop.row)
     }
     for (const m of entry.allMeshes) { m.material?.dispose(); m.dispose() }
+    entry.root.dispose()
     this.entries.delete(instanceId)
   }
 
@@ -102,31 +109,38 @@ export class PropManager {
     const entry = this.entries.get(instanceId)
     if (!entry) return
     entry.prop = { ...entry.prop, state }
-    if (entry.panel) {
-      // door panel: hidden when open; window glass: hidden when open
-      entry.panel.isVisible = state.open !== true
+    if (entry.panel) entry.panel.isVisible = state.open !== true
+    if ('mirrored' in state) {
+      if (entry.category === 'floor-object') entry.root.rotation.y = state.mirrored ? Math.PI / 2 : 0
+      else entry.root.scaling.x = state.mirrored ? -1 : 1
     }
+  }
+
+  setPropZOrder(instanceId: string, zOrder: number): void {
+    const entry = this.entries.get(instanceId)
+    if (!entry) return
+    entry.prop = { ...entry.prop, zOrder }
+    entry.root.position.y = -zOrder * 0.03
+  }
+
+  getInstanceIdsAt(col: number, row: number): string[] {
+    const ids: string[] = []
+    for (const [id, entry] of this.entries) {
+      if (entry.prop.col === col && entry.prop.row === row) ids.push(id)
+    }
+    return ids
   }
 
   move(instanceId: string, col: number, row: number, buildingManager: BuildingManager): void {
     const entry = this.entries.get(instanceId)
     if (!entry) return
     const oldProp = entry.prop
-    // Restore old position if punch-through
     if (entry.category === 'punch-through') buildingManager.showWallAt(oldProp.col, oldProp.row)
-    // Update stored position
     entry.prop = { ...entry.prop, col, row }
-    // Hide new wall if punch-through
     if (entry.category === 'punch-through') buildingManager.hideWallAt(col, row)
-    // Move all meshes by delta
-    const { x: oldX, z: oldZ } = cellToWorld(oldProp.col, oldProp.row)
-    const { x: newX, z: newZ } = cellToWorld(col, row)
-    const dx = newX - oldX
-    const dz = newZ - oldZ
-    for (const m of entry.allMeshes) {
-      m.position.x += dx
-      m.position.z += dz
-    }
+    const { x, z } = cellToWorld(col, row)
+    entry.root.position.x = x
+    entry.root.position.z = z
   }
 
   loadSnapshot(
@@ -154,61 +168,69 @@ export class PropManager {
   dispose(): void {
     for (const entry of this.entries.values()) {
       for (const m of entry.allMeshes) { m.material?.dispose(); m.dispose() }
+      entry.root.dispose()
     }
     this.entries.clear()
   }
 
-  // ── Prop builders ──────────────────────────────────────────────────────────
+  // ── Prop builders — all positions are LOCAL (relative to root at cell center) ──
 
-  /** door-wood — punch-through */
-  private placeDoor(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[]; panel: Mesh } {
+  /** door-wood — punch-through; frame spans x-axis by default, rotated for z-facing walls */
+  private placeDoor(prop: BuilderProp): { allMeshes: Mesh[]; panel: Mesh } {
     const id = prop.instanceId
-    const header    = this.makeBox(`prop-header-${id}`,  1,    0.2,  0.15, x,          1.5,   z, FRAME_COLOR)
-    const leftJamb  = this.makeBox(`prop-ljamb-${id}`,   0.15, 1.4,  0.15, x - 0.425, 0.7,   z, FRAME_COLOR)
-    const rightJamb = this.makeBox(`prop-rjamb-${id}`,   0.15, 1.4,  0.15, x + 0.425, 0.7,   z, FRAME_COLOR)
-    const panel     = this.makeBox(`prop-panel-${id}`,   0.7,  1.35, 0.08, x,          0.675, z, PANEL_COLOR)
+    const header    = this.makeBox(`prop-header-${id}`,  1,    0.2,  0.15,  0,       1.5,   0,  FRAME_COLOR)
+    const leftJamb  = this.makeBox(`prop-ljamb-${id}`,   0.15, 1.4,  0.15, -0.425,  0.7,   0,  FRAME_COLOR)
+    const rightJamb = this.makeBox(`prop-rjamb-${id}`,   0.15, 1.4,  0.15,  0.425,  0.7,   0,  FRAME_COLOR)
+    const panel     = this.makeBox(`prop-panel-${id}`,   0.7,  1.35, 0.08,  0,       0.675, 0,  PANEL_COLOR)
     panel.isVisible = prop.state.open !== true
     return { allMeshes: [header, leftJamb, rightJamb, panel], panel }
   }
 
-  /** window-wood — wall-decor; frame overlays wall exterior face (wall stays visible) */
-  private placeWindow(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[]; panel: Mesh } {
+  /** window-wood — wall-decor; frame on both faces so it's visible from either side */
+  private placeWindow(prop: BuilderProp): { allMeshes: Mesh[]; panel: Mesh } {
     const id = prop.instanceId
-    // fz = just outside wall's near exterior face (wall box front at z-0.5)
-    const fz = z - 0.52
-    const leftJamb  = this.makeBox(`prop-wlj-${id}`,  0.10, 0.82, 0.06, x - 0.33, 0.86, fz,       FRAME_COLOR, 1,   true)
-    const rightJamb = this.makeBox(`prop-wrj-${id}`,  0.10, 0.82, 0.06, x + 0.33, 0.86, fz,       FRAME_COLOR, 1,   true)
-    const topRail   = this.makeBox(`prop-wtr-${id}`,  0.80, 0.08, 0.06, x,         1.25, fz,       FRAME_COLOR, 1,   true)
-    const botSill   = this.makeBox(`prop-wbs-${id}`,  0.80, 0.10, 0.06, x,         0.47, fz,       FRAME_COLOR, 1,   true)
-    const glass     = this.makeBox(`prop-wgl-${id}`,  0.65, 0.74, 0.03, x,         0.86, fz - 0.01, GLASS_COLOR, 0.4, true)
+    const fa = -0.52   // face A (local -z)
+    const fb = +0.52   // face B (local +z)
+    const leftJamb1  = this.makeBox(`prop-wlj1-${id}`, 0.10, 0.82, 0.06, -0.33, 0.86, fa, FRAME_COLOR, 1, true)
+    const rightJamb1 = this.makeBox(`prop-wrj1-${id}`, 0.10, 0.82, 0.06,  0.33, 0.86, fa, FRAME_COLOR, 1, true)
+    const topRail1   = this.makeBox(`prop-wtr1-${id}`, 0.80, 0.08, 0.06,  0,    1.25, fa, FRAME_COLOR, 1, true)
+    const botSill1   = this.makeBox(`prop-wbs1-${id}`, 0.80, 0.10, 0.06,  0,    0.47, fa, FRAME_COLOR, 1, true)
+    const leftJamb2  = this.makeBox(`prop-wlj2-${id}`, 0.10, 0.82, 0.06, -0.33, 0.86, fb, FRAME_COLOR, 1, true)
+    const rightJamb2 = this.makeBox(`prop-wrj2-${id}`, 0.10, 0.82, 0.06,  0.33, 0.86, fb, FRAME_COLOR, 1, true)
+    const topRail2   = this.makeBox(`prop-wtr2-${id}`, 0.80, 0.08, 0.06,  0,    1.25, fb, FRAME_COLOR, 1, true)
+    const botSill2   = this.makeBox(`prop-wbs2-${id}`, 0.80, 0.10, 0.06,  0,    0.47, fb, FRAME_COLOR, 1, true)
+    // Glass centered in wall depth (renderingGroupId=1 renders over wall mesh so no z-fight)
+    const glass = this.makeBox(`prop-wgl-${id}`, 0.65, 0.74, 0.96, 0, 0.86, 0, GLASS_COLOR, 0.4, true)
     glass.isVisible = prop.state.open !== true
-    return { allMeshes: [leftJamb, rightJamb, topRail, botSill, glass], panel: glass }
+    return {
+      allMeshes: [leftJamb1, rightJamb1, topRail1, botSill1, leftJamb2, rightJamb2, topRail2, botSill2, glass],
+      panel: glass,
+    }
   }
 
-  /** painting — wall-decor; rendered just outside wall's near face (z - 0.52) */
-  private placePainting(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[] } {
+  /** painting — wall-decor; canvas on exterior face at local z = -0.52 */
+  private placePainting(prop: BuilderProp): { allMeshes: Mesh[] } {
     const id = prop.instanceId
-    // Wall box near face is at z - 0.5; offset just outside so depth test passes
-    const wz = z - 0.52
-    const canvas = this.makeBox(`prop-canvas-${id}`, 0.6,  0.4,  0.04, x, 1.0, wz,        CANVAS_COLOR, 1, true)
-    const inner  = this.makeBox(`prop-art-${id}`,    0.48, 0.28, 0.05, x, 1.0, wz - 0.01, ART_COLOR,    1, true)
+    const wz = -0.52
+    const canvas = this.makeBox(`prop-canvas-${id}`, 0.6,  0.4,  0.04, 0, 1.0, wz,        CANVAS_COLOR, 1, true)
+    const inner  = this.makeBox(`prop-art-${id}`,    0.48, 0.28, 0.05, 0, 1.0, wz - 0.01, ART_COLOR,    1, true)
     return { allMeshes: [canvas, inner] }
   }
 
   /** rug — floor-decor */
-  private placeRug(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[] } {
+  private placeRug(prop: BuilderProp): { allMeshes: Mesh[] } {
     const id     = prop.instanceId
-    const base   = this.makeBox(`prop-rug-${id}`,       0.92, 0.08, 0.92, x, 0.04, z, RUG_COLOR)
-    const center = this.makeBox(`prop-rug-ctr-${id}`,   0.66, 0.09, 0.66, x, 0.045, z, new Color3(0.75, 0.3, 0.35))
+    const base   = this.makeBox(`prop-rug-${id}`,     0.92, 0.08, 0.92, 0, 0.04,  0, RUG_COLOR)
+    const center = this.makeBox(`prop-rug-ctr-${id}`, 0.66, 0.09, 0.66, 0, 0.045, 0, new Color3(0.75, 0.3, 0.35))
     return { allMeshes: [base, center] }
   }
 
   /** bartop — floor-object */
-  private placeBartop(prop: BuilderProp, x: number, z: number): { allMeshes: Mesh[] } {
-    const id       = prop.instanceId
-    const top      = this.makeBox(`prop-btop-${id}`,  1.0,  0.1,  0.6,  x, 0.9,   z,          COUNTER_COLOR)
-    const body     = this.makeBox(`prop-bbody-${id}`, 0.95, 0.85, 0.55, x, 0.425, z,          COUNTER_BODY)
-    const footRail = this.makeBox(`prop-bfoot-${id}`, 0.8,  0.04, 0.04, x, 0.1,   z - 0.25,  METAL_COLOR)
+  private placeBartop(prop: BuilderProp): { allMeshes: Mesh[] } {
+    const id     = prop.instanceId
+    const top      = this.makeBox(`prop-btop-${id}`,  1.0,  0.1,  0.6,  0, 0.9,   0,     COUNTER_COLOR)
+    const body     = this.makeBox(`prop-bbody-${id}`, 0.95, 0.85, 0.55, 0, 0.425, 0,     COUNTER_BODY)
+    const footRail = this.makeBox(`prop-bfoot-${id}`, 0.8,  0.04, 0.04, 0, 0.1,  -0.25,  METAL_COLOR)
     return { allMeshes: [top, body, footRail] }
   }
 
@@ -223,7 +245,7 @@ export class PropManager {
     twoSided = false,
   ): Mesh {
     const mesh = MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, this.scene)
-    mesh.position.set(x, y, z)
+    mesh.position.set(x, y, z)   // local position — parented to root in place()
     mesh.renderingGroupId = 1
     const mat = new StandardMaterial(`${name}-mat`, this.scene)
     mat.diffuseColor  = color
