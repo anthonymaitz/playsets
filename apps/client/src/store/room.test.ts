@@ -138,3 +138,22 @@ describe('useRoomStore — builderProps', () => {
     expect(() => useRoomStore.getState().moveProp('ghost', 0, 0)).not.toThrow()
   })
 })
+
+describe('useRoomStore — zOrder', () => {
+  beforeEach(() => { useRoomStore.getState().reset() })
+
+  it('setZOrder updates zOrder for an existing sprite', () => {
+    useRoomStore.getState().placeSprite({ instanceId: 'i1', spriteId: 's1', col: 0, row: 0, placedBy: 'p1' })
+    useRoomStore.getState().setZOrder('i1', 2)
+    expect(useRoomStore.getState().sprites['i1'].zOrder).toBe(2)
+  })
+
+  it('setZOrder does nothing for unknown instanceId', () => {
+    expect(() => useRoomStore.getState().setZOrder('unknown', 2)).not.toThrow()
+  })
+
+  it('placeSprite preserves zOrder when provided', () => {
+    useRoomStore.getState().placeSprite({ instanceId: 'i1', spriteId: 's1', col: 0, row: 0, placedBy: 'p1', zOrder: 3 })
+    expect(useRoomStore.getState().sprites['i1'].zOrder).toBe(3)
+  })
+})

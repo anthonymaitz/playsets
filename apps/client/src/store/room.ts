@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import type { SpriteInstance, FacingDir, AnimationName, BuildingTile, BuilderProp } from '../types'
+import type { SpriteInstance, FacingDir, AnimationName, BuildingTile, BuilderProp, Roof } from '../types'
 
 interface RoomStore {
   roomId: string | null
   sprites: Record<string, SpriteInstance>
   buildingTiles: Record<string, BuildingTile>
   builderProps: Record<string, BuilderProp>
+  roofs: Record<string, Roof>
   setRoomId: (id: string) => void
   placeSprite: (s: SpriteInstance) => void
   moveSprite: (instanceId: string, col: number, row: number) => void
@@ -15,6 +16,7 @@ interface RoomStore {
   setAnimation: (instanceId: string, animation: AnimationName) => void
   setHidden: (instanceId: string, hidden: boolean) => void
   removeSprite: (instanceId: string) => void
+  setZOrder: (instanceId: string, zOrder: number) => void
   loadSnapshot: (sprites: SpriteInstance[]) => void
   placeTile: (t: BuildingTile) => void
   removeTile: (instanceId: string) => void
@@ -24,6 +26,11 @@ interface RoomStore {
   setPropState: (instanceId: string, state: Record<string, string | number | boolean>) => void
   loadPropSnapshot: (props: BuilderProp[]) => void
   moveProp: (instanceId: string, col: number, row: number) => void
+  placeRoof: (r: Roof) => void
+  removeRoof: (instanceId: string) => void
+  setRoofVisible: (instanceId: string, visible: boolean) => void
+  setRoofTile: (instanceId: string, tileId: string) => void
+  loadRoofSnapshot: (roofs: Roof[]) => void
   reset: () => void
 }
 
@@ -32,6 +39,7 @@ export const useRoomStore = create<RoomStore>((set) => ({
   sprites: {},
   buildingTiles: {},
   builderProps: {},
+  roofs: {},
   setRoomId: (id) => set({ roomId: id }),
   placeSprite: (s) => set((state) => ({ sprites: { ...state.sprites, [s.instanceId]: s } })),
   moveSprite: (instanceId, col, row) =>
@@ -71,6 +79,11 @@ export const useRoomStore = create<RoomStore>((set) => ({
       const next = { ...state.sprites }
       delete next[instanceId]
       return { sprites: next }
+    }),
+  setZOrder: (instanceId, zOrder) =>
+    set((state) => {
+      if (!state.sprites[instanceId]) return state
+      return { sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], zOrder } } }
     }),
   loadSnapshot: (sprites) =>
     set({ sprites: Object.fromEntries(sprites.map((s) => [s.instanceId, s])) }),
@@ -112,5 +125,24 @@ export const useRoomStore = create<RoomStore>((set) => ({
         },
       }
     }),
-  reset: () => set({ roomId: null, sprites: {}, buildingTiles: {}, builderProps: {} }),
+  placeRoof: (r) => set((state) => ({ roofs: { ...state.roofs, [r.instanceId]: r } })),
+  removeRoof: (instanceId) =>
+    set((state) => {
+      const next = { ...state.roofs }
+      delete next[instanceId]
+      return { roofs: next }
+    }),
+  setRoofVisible: (instanceId, visible) =>
+    set((state) => {
+      if (!state.roofs[instanceId]) return state
+      return { roofs: { ...state.roofs, [instanceId]: { ...state.roofs[instanceId], visible } } }
+    }),
+  setRoofTile: (instanceId, tileId) =>
+    set((state) => {
+      if (!state.roofs[instanceId]) return state
+      return { roofs: { ...state.roofs, [instanceId]: { ...state.roofs[instanceId], tileId } } }
+    }),
+  loadRoofSnapshot: (roofs) =>
+    set({ roofs: Object.fromEntries(roofs.map((r) => [r.instanceId, r])) }),
+  reset: () => set({ roomId: null, sprites: {}, buildingTiles: {}, builderProps: {}, roofs: {} }),
 }))

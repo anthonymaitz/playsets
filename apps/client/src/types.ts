@@ -14,6 +14,7 @@ export interface SpriteInstance {
   speech?: string
   animation?: AnimationName
   hidden?: boolean
+  zOrder?: number
 }
 
 export interface Player {
@@ -82,6 +83,16 @@ export interface PropManifest {
   themes: PropTheme[]
 }
 
+export interface Roof {
+  instanceId: string
+  tileId: string
+  cells: Array<{ col: number; row: number }>
+  tokenCol: number
+  tokenRow: number
+  visible: boolean
+  createdBy: string
+}
+
 export type GameMessage =
   | { type: 'state:snapshot'; sprites: SpriteInstance[]; players: Player[] }
   | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string }
@@ -105,3 +116,9 @@ export type GameMessage =
   | { type: 'prop:interact'; instanceId: string; state: Record<string, string | number | boolean> }
   | { type: 'prop:snapshot'; props: BuilderProp[] }
   | { type: 'prop:move'; instanceId: string; col: number; row: number }
+  | { type: 'roof:place'; roof: Roof }
+  | { type: 'roof:remove'; instanceId: string }
+  | { type: 'roof:visible'; instanceId: string; visible: boolean }
+  | { type: 'roof:tile'; instanceId: string; tileId: string }
+  | { type: 'roof:snapshot'; roofs: Roof[] }
+  | { type: 'sprite:zorder'; instanceId: string; zOrder: number }
