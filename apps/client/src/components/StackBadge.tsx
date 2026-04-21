@@ -17,6 +17,7 @@ interface Props {
 export function StackBadge({ instanceId, scene, canvasLeft, canvasTop, onAdvance }: Props) {
   const [overlay, setOverlay] = useState<{ screenX: number; screenY: number; pos: number; total: number } | null>(null)
   const rafRef = useRef<number>(0)
+  const onAdvanceRef = useRef(onAdvance)
 
   useEffect(() => {
     const update = () => {
@@ -50,7 +51,7 @@ export function StackBadge({ instanceId, scene, canvasLeft, canvasTop, onAdvance
 
       setOverlay({
         screenX: canvasLeft + projected.x,
-        screenY: canvasTop + projected.y + 60,
+        screenY: canvasTop + projected.y + 60, // offset below sprite center
         pos,
         total,
       })
@@ -61,11 +62,15 @@ export function StackBadge({ instanceId, scene, canvasLeft, canvasTop, onAdvance
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [instanceId, scene, canvasLeft, canvasTop])
 
+  useEffect(() => {
+    onAdvanceRef.current = onAdvance
+  }, [onAdvance])
+
   if (!overlay) return null
 
   return (
     <button
-      onPointerDown={(e) => { e.stopPropagation(); onAdvance() }}
+      onPointerDown={(e) => { e.stopPropagation(); onAdvanceRef.current() }}
       style={{
         position: 'fixed',
         left: overlay.screenX - 26,
