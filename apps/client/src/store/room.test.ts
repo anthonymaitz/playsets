@@ -157,3 +157,86 @@ describe('useRoomStore — zOrder', () => {
     expect(useRoomStore.getState().sprites['i1'].zOrder).toBe(3)
   })
 })
+
+describe('useRoomStore — roofs', () => {
+  const sampleRoof = {
+    instanceId: 'r1',
+    tileId: 'roof-thatch',
+    cells: [{ col: 0, row: 0 }],
+    tokenCol: 0,
+    tokenRow: 0,
+    visible: true,
+    createdBy: 'player1',
+  }
+
+  beforeEach(() => {
+    useRoomStore.getState().reset()
+  })
+
+  it('starts with empty roofs', () => {
+    expect(Object.keys(useRoomStore.getState().roofs)).toHaveLength(0)
+  })
+
+  it('placeRoof stores a roof by instanceId', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    expect(useRoomStore.getState().roofs['r1']).toMatchObject({
+      instanceId: 'r1',
+      tileId: 'roof-thatch',
+      visible: true,
+    })
+  })
+
+  it('removeRoof deletes a roof by instanceId', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().removeRoof('r1')
+    expect(useRoomStore.getState().roofs['r1']).toBeUndefined()
+  })
+
+  it('setRoofVisible updates visible for an existing roof', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().setRoofVisible('r1', false)
+    expect(useRoomStore.getState().roofs['r1'].visible).toBe(false)
+  })
+
+  it('setRoofVisible does nothing for unknown instanceId', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().setRoofVisible('unknown', false)
+    expect(useRoomStore.getState().roofs['r1'].visible).toBe(true)
+  })
+
+  it('setRoofTile updates tileId for an existing roof', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().setRoofTile('r1', 'roof-slate')
+    expect(useRoomStore.getState().roofs['r1'].tileId).toBe('roof-slate')
+  })
+
+  it('setRoofTile does nothing for unknown instanceId', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().setRoofTile('unknown', 'roof-slate')
+    expect(useRoomStore.getState().roofs['r1'].tileId).toBe('roof-thatch')
+  })
+
+  it('loadRoofSnapshot replaces all roofs', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().loadRoofSnapshot([
+      {
+        instanceId: 'r2',
+        tileId: 'roof-slate',
+        cells: [{ col: 1, row: 1 }],
+        tokenCol: 1,
+        tokenRow: 1,
+        visible: false,
+        createdBy: 'player2',
+      },
+    ])
+    expect(useRoomStore.getState().roofs['r1']).toBeUndefined()
+    expect(useRoomStore.getState().roofs['r2']).toBeDefined()
+    expect(Object.keys(useRoomStore.getState().roofs)).toHaveLength(1)
+  })
+
+  it('reset clears roofs', () => {
+    useRoomStore.getState().placeRoof(sampleRoof)
+    useRoomStore.getState().reset()
+    expect(Object.keys(useRoomStore.getState().roofs)).toHaveLength(0)
+  })
+})
