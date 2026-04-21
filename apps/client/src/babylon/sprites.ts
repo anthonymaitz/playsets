@@ -108,7 +108,7 @@ export class SpriteManager {
       { width: CELL_SIZE * 0.9, height: h },
       this.scene,
     )
-    plane.position = new Vector3(x, h / 2, z)
+    plane.position = new Vector3(x, h / 2 - (instance.zOrder ?? 0) * 0.03, z)
     plane.billboardMode = Mesh.BILLBOARDMODE_Y
     plane.renderingGroupId = 1
     if (initialMirrored) plane.scaling.x = -1
@@ -184,6 +184,17 @@ export class SpriteManager {
     mesh.metadata.facing = facing
     const snapIndex = this.camera ? getCameraSnapIndex(this.camera.alpha) : 0
     this._applyFacingVariant(instanceId, facing, snapIndex)
+  }
+
+  setZOrder(instanceId: string, zOrder: number): void {
+    const mesh = this.meshes.get(instanceId)
+    if (!mesh) return
+    const h = mesh.metadata?.draggable === false ? TERRAIN_HEIGHT : SPRITE_HEIGHT
+    const newY = h / 2 - zOrder * 0.03
+    mesh.position.y = newY
+    if (mesh.metadata?.baseY !== undefined) {
+      mesh.metadata.baseY = newY
+    }
   }
 
   private _applyFacingVariant(instanceId: string, facing: FacingDir, snapIndex: number): void {
