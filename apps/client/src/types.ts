@@ -95,7 +95,7 @@ export interface Roof {
 
 export type GameMessage =
   | { type: 'state:snapshot'; sprites: SpriteInstance[]; players: Player[] }
-  | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string }
+  | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string; zOrder?: number }
   | { type: 'sprite:move'; instanceId: string; col: number; row: number }
   | { type: 'sprite:remove'; instanceId: string }
   | { type: 'sprite:emote'; instanceId: string; emote: string }

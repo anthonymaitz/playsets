@@ -85,8 +85,8 @@ export class GuestSession {
         break
       }
       case 'sprite:place': {
-        roomStore.placeSprite({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy })
-        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy }, `/assets/sprites/${msg.spriteId}.svg`)
+        roomStore.placeSprite({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy, zOrder: msg.zOrder })
+        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy, zOrder: msg.zOrder }, `/assets/sprites/${msg.spriteId}.svg`)
         break
       }
       case 'sprite:move': {
