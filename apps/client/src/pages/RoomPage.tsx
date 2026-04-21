@@ -25,6 +25,8 @@ import { TokenMenu } from '../components/token-menu/TokenMenu'
 import { TokenHUD } from '../components/TokenHUD'
 import { RoofMenu } from '../components/RoofMenu'
 import { StackBadge } from '../components/StackBadge'
+import { PropMirrorPicker } from '../components/PropMirrorPicker'
+import { PropStackBadge } from '../components/PropStackBadge'
 import { usePlayersStore } from '../store/players'
 import { useRoomStore } from '../store/room'
 import type { SpriteManifestEntry, FacingDir, WeatherType, BackgroundType, Roof } from '../types'
@@ -48,12 +50,6 @@ function sendMsg(session: HostSession | GuestSession | null, msg: SessionMsg): v
 function isWallCell(col: number, row: number): boolean {
   return Object.values(useRoomStore.getState().buildingTiles).some(
     (t) => t.col === col && t.row === row && t.tileId.includes('wall'),
-  )
-}
-
-function isFloorCell(col: number, row: number): boolean {
-  return Object.values(useRoomStore.getState().buildingTiles).some(
-    (t) => t.col === col && t.row === row && t.tileId.includes('floor'),
   )
 }
 
@@ -146,6 +142,8 @@ export function RoomPage() {
   const [tiles, setTiles] = useState<TileManifestEntry[]>([])
   const [roofMenu, setRoofMenu] = useState<{ instanceId: string; x: number; y: number } | null>(null)
   const [stackBadge, setStackBadge] = useState<{ instanceId: string } | null>(null)
+  const [propMirrorPicker, setPropMirrorPicker] = useState<{ instanceId: string; x: number; y: number } | null>(null)
+  const [propStackBadge, setPropStackBadge] = useState<{ instanceId: string } | null>(null)
   const selectedPropRef = useRef<PropManifestEntry | null>(null)
   const propManagerRef = useRef<PropManager | null>(null)
   const propModeRef = useRef(false)
@@ -256,12 +254,11 @@ export function RoomPage() {
             if (propData) {
               const cat = getPropCategory(propData.propId)
               const isWall = buildingManagerRef.current?.isWallAt(col, row) ?? false
-              const isFloor = isFloorCell(col, row)
               const valid =
                 (cat === 'punch-through' && isWall) ||
                 (cat === 'wall-decor' && isWall) ||
-                (cat === 'floor-decor' && isFloor) ||
-                (cat === 'floor-object' && isFloor)
+                cat === 'floor-decor' ||
+                cat === 'floor-object'
               if (valid) {
                 propManagerRef.current?.move(drag.instanceId, col, row, buildingManagerRef.current!)
                 propDragRef.current = { ...drag, lastCol: col, lastRow: row }
@@ -331,10 +328,19 @@ export function RoomPage() {
             propManagerRef.current?.setState(instanceId, newState)
             sendMsg(sessionRef.current, { type: 'prop:interact', instanceId, state: newState })
           } else if (existing) {
-            // Tap on decorative prop → remove
-            useRoomStore.getState().removeProp(instanceId)
-            propManagerRef.current?.remove(instanceId, buildingManagerRef.current!)
-            sendMsg(sessionRef.current, { type: 'prop:remove', instanceId })
+            const cat = getPropCategory(existing.propId)
+            if (cat === 'floor-decor' || cat === 'floor-object') {
+              const rect = canvasRef.current?.getBoundingClientRect()
+              const x = (rect?.left ?? 0) + scene.pointerX
+              const y = (rect?.top ?? 0) + scene.pointerY
+              setPropMirrorPicker({ instanceId, x, y })
+              const stackCount = propManagerRef.current?.getInstanceIdsAt(existing.col, existing.row).length ?? 0
+              if (stackCount > 1) setPropStackBadge({ instanceId })
+            } else {
+              useRoomStore.getState().removeProp(instanceId)
+              propManagerRef.current?.remove(instanceId, buildingManagerRef.current!)
+              sendMsg(sessionRef.current, { type: 'prop:remove', instanceId })
+            }
           }
         }
         return
@@ -386,18 +392,19 @@ export function RoomPage() {
           if (pick?.hit && pick.pickedPoint) {
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
             const isWall = buildingManagerRef.current?.isWallAt(col, row) ?? false
-            const isFloor = isFloorCell(col, row)
             const cat = selectedP.category
             const canPlace =
               (cat === 'punch-through' && isWall) ||
               (cat === 'wall-decor' && isWall) ||
-              (cat === 'floor-decor' && isFloor) ||
-              (cat === 'floor-object' && isFloor)
-            const occupied = !!propManagerRef.current?.getInstanceIdAt(col, row)
+              cat === 'floor-decor' ||
+              cat === 'floor-object'
+            const isFloorProp = cat === 'floor-decor' || cat === 'floor-object'
+            const occupied = !isFloorProp && !!propManagerRef.current?.getInstanceIdAt(col, row)
             if (canPlace && !occupied) {
               const newId = nanoid()
               const facing = (cat === 'punch-through' || cat === 'wall-decor') ? getWallFacing(col, row) : 'x'
-              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false, facing } }
+              const existingPropCount = isFloorProp ? (propManagerRef.current?.getInstanceIdsAt(col, row).length ?? 0) : 0
+              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false, facing }, zOrder: existingPropCount }
               useRoomStore.getState().placeProp(prop)
               propManagerRef.current?.place(prop, selectedP.category, buildingManagerRef.current!)
               sendMsg(sessionRef.current, { type: 'prop:place', prop })
@@ -445,6 +452,7 @@ export function RoomPage() {
       if (sprite.hasDirections) {
         setDirectionPicker({ instanceId: newInstanceId, x: e.clientX, y: e.clientY })
       }
+      if (existingCount > 0) setStackBadge({ instanceId: newInstanceId })
     }
 
     const handleDocPointerUp = (e: PointerEvent) => {
@@ -468,7 +476,9 @@ export function RoomPage() {
     }
 
     const handlePointerDown = (_e: PointerEvent) => {
-      propDragRef.current = null  // clear stale state on every new press
+      propDragRef.current = null
+      setPropMirrorPicker(null)
+      setPropStackBadge(null)
       if (!isHost || propModeRef.current || buildingModeRef.current || roofModeRef.current) return
       if (selectedSpriteRef.current) return  // sprite placement takes priority
       // Don't start prop drag when tapping roof token
@@ -680,6 +690,51 @@ export function RoomPage() {
     dispatchMsg({ type: 'sprite:zorder', instanceId: stack[nextIdx].instanceId, zOrder: idx })
   }
 
+  const handleAdvancePropStack = () => {
+    if (!propStackBadge) return
+    const { builderProps } = useRoomStore.getState()
+    const prop = builderProps[propStackBadge.instanceId]
+    if (!prop) return
+    const stack = Object.values(builderProps)
+      .filter((p) => p.col === prop.col && p.row === prop.row)
+      .sort((a, b) => (a.zOrder ?? 0) - (b.zOrder ?? 0))
+    if (stack.length <= 1) return
+    const idx = stack.findIndex((p) => p.instanceId === propStackBadge.instanceId)
+    if (idx < 0) return
+    const nextIdx = (idx + 1) % stack.length
+    stack.forEach((p, i) => {
+      if ((p.zOrder ?? -1) !== i) {
+        useRoomStore.getState().setPropZOrder(p.instanceId, i)
+        propManagerRef.current?.setPropZOrder(p.instanceId, i)
+        dispatchMsg({ type: 'prop:zorder', instanceId: p.instanceId, zOrder: i })
+      }
+    })
+    useRoomStore.getState().setPropZOrder(stack[idx].instanceId, nextIdx)
+    useRoomStore.getState().setPropZOrder(stack[nextIdx].instanceId, idx)
+    propManagerRef.current?.setPropZOrder(stack[idx].instanceId, nextIdx)
+    propManagerRef.current?.setPropZOrder(stack[nextIdx].instanceId, idx)
+    dispatchMsg({ type: 'prop:zorder', instanceId: stack[idx].instanceId, zOrder: nextIdx })
+    dispatchMsg({ type: 'prop:zorder', instanceId: stack[nextIdx].instanceId, zOrder: idx })
+  }
+
+  const handleMirrorProp = (instanceId: string, mirrored: boolean) => {
+    const existing = useRoomStore.getState().builderProps[instanceId]
+    if (!existing) return
+    const newState = { ...existing.state, mirrored }
+    useRoomStore.getState().setPropState(instanceId, newState)
+    propManagerRef.current?.setState(instanceId, newState)
+    dispatchMsg({ type: 'prop:interact', instanceId, state: newState })
+    setPropMirrorPicker(null)
+  }
+
+  const handleRemovePropFromPicker = (instanceId: string) => {
+    useRoomStore.getState().removeProp(instanceId)
+    propManagerRef.current?.remove(instanceId, buildingManagerRef.current!)
+    dispatchMsg({ type: 'prop:remove', instanceId })
+    setPropMirrorPicker(null)
+    setPropStackBadge(null)
+  }
+
   if (needsName) return <JoinDialog onDone={() => setNeedsName(false)} />
 
   const activeSprite = tokenMenu ? sprites[tokenMenu.instanceId] : null
@@ -810,6 +865,25 @@ export function RoomPage() {
           onAdvance={handleAdvanceStack}
         />
       )}
+      {propMirrorPicker && (
+        <PropMirrorPicker
+          instanceId={propMirrorPicker.instanceId}
+          screenX={propMirrorPicker.x}
+          screenY={propMirrorPicker.y}
+          isHost={isHost}
+          onMirror={handleMirrorProp}
+          onRemove={handleRemovePropFromPicker}
+        />
+      )}
+      {propStackBadge && sceneRef.current && (
+        <PropStackBadge
+          instanceId={propStackBadge.instanceId}
+          scene={sceneRef.current}
+          canvasLeft={canvasRect.left}
+          canvasTop={canvasRect.top}
+          onAdvance={handleAdvancePropStack}
+        />
+      )}
       {buildingMode && (
         <>
           <BuildingControls
@@ -871,6 +945,9 @@ function setupDragController(
       useRoomStore.getState().moveSprite(instanceId, col, row)
       sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
+      const { sprites } = useRoomStore.getState()
+      const count = Object.values(sprites).filter((s) => s.col === col && s.row === row).length
+      setStackBadge(count > 1 ? { instanceId } : null)
     },
     onSpriteClick: (instanceId) => {
       if (buildingModeRef.current) return

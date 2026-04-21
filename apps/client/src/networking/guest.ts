@@ -186,6 +186,11 @@ export class GuestSession {
         this.propManager.move(msg.instanceId, msg.col, msg.row, this.buildingManager)
         break
       }
+      case 'prop:zorder': {
+        useRoomStore.getState().setPropZOrder(msg.instanceId, msg.zOrder)
+        this.propManager.setPropZOrder(msg.instanceId, msg.zOrder)
+        break
+      }
       case 'prop:snapshot': {
         useRoomStore.getState().loadPropSnapshot(msg.props)
         this.propManager.loadSnapshot(msg.props, getPropCategory, this.buildingManager)
