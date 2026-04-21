@@ -659,16 +659,25 @@ export function RoomPage() {
     if (stack.length <= 1) return
 
     const idx = stack.findIndex((s) => s.instanceId === stackBadge.instanceId)
+    if (idx < 0) return
     const nextIdx = (idx + 1) % stack.length
-    const currentZ = stack[idx].zOrder ?? 0
-    const nextZ = stack[nextIdx].zOrder ?? 0
 
-    useRoomStore.getState().setZOrder(stack[idx].instanceId, nextZ)
-    useRoomStore.getState().setZOrder(stack[nextIdx].instanceId, currentZ)
-    spriteManagerRef.current?.setZOrder(stack[idx].instanceId, nextZ)
-    spriteManagerRef.current?.setZOrder(stack[nextIdx].instanceId, currentZ)
-    dispatchMsg({ type: 'sprite:zorder', instanceId: stack[idx].instanceId, zOrder: nextZ })
-    dispatchMsg({ type: 'sprite:zorder', instanceId: stack[nextIdx].instanceId, zOrder: currentZ })
+    // Normalize to sequential zOrders so swap always produces a visible change
+    stack.forEach((s, i) => {
+      if ((s.zOrder ?? -1) !== i) {
+        useRoomStore.getState().setZOrder(s.instanceId, i)
+        spriteManagerRef.current?.setZOrder(s.instanceId, i)
+        dispatchMsg({ type: 'sprite:zorder', instanceId: s.instanceId, zOrder: i })
+      }
+    })
+
+    // After normalization, sprite at position idx has zOrder=idx, next has zOrder=nextIdx
+    useRoomStore.getState().setZOrder(stack[idx].instanceId, nextIdx)
+    useRoomStore.getState().setZOrder(stack[nextIdx].instanceId, idx)
+    spriteManagerRef.current?.setZOrder(stack[idx].instanceId, nextIdx)
+    spriteManagerRef.current?.setZOrder(stack[nextIdx].instanceId, idx)
+    dispatchMsg({ type: 'sprite:zorder', instanceId: stack[idx].instanceId, zOrder: nextIdx })
+    dispatchMsg({ type: 'sprite:zorder', instanceId: stack[nextIdx].instanceId, zOrder: idx })
   }
 
   if (needsName) return <JoinDialog onDone={() => setNeedsName(false)} />
