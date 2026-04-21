@@ -1,6 +1,6 @@
 import { SignalingClient } from './signaling'
 import { PeerConnection } from './peer'
-import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot } from './messages'
+import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot, sendRoofSnapshot } from './messages'
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
 import type { GameMessage } from '../types'
@@ -8,6 +8,7 @@ import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
 import { type PropManager, getPropCategory } from '../babylon/props'
+import type { RoofManager } from '../babylon/roofs'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
 
@@ -21,6 +22,7 @@ export class HostSession {
     private spriteManager: SpriteManager,
     private buildingManager: BuildingManager,
     private propManager: PropManager,
+    private roofManager: RoofManager,
     _cursorManager: CursorManager,
     onRoomCreated: (roomId: string) => void,
   ) {
@@ -47,11 +49,12 @@ export class HostSession {
     this.signaling.createRoom(this.currentRoomId).then(() => {
       const { sprites, buildingTiles } = useRoomStore.getState()
       const { players, localPlayer } = usePlayersStore.getState()
-      const { builderProps } = useRoomStore.getState()
+      const { builderProps, roofs } = useRoomStore.getState()
       for (const peer of this.peers.values()) {
         sendSnapshot(peer, Object.values(sprites), [localPlayer, ...players])
         sendBuildingSnapshot(peer, Object.values(buildingTiles))
         sendPropSnapshot(peer, Object.values(builderProps))
+        sendRoofSnapshot(peer, Object.values(roofs))
       }
     }).catch((err: unknown) => {
       console.error('Failed to re-register room after reconnect:', err)
@@ -68,8 +71,9 @@ export class HostSession {
         sendSnapshot(peer, Object.values(sprites), [localPlayer, ...players])
         const { buildingTiles } = useRoomStore.getState()
         sendBuildingSnapshot(peer, Object.values(buildingTiles))
-        const { builderProps } = useRoomStore.getState()
+        const { builderProps, roofs } = useRoomStore.getState()
         sendPropSnapshot(peer, Object.values(builderProps))
+        sendRoofSnapshot(peer, Object.values(roofs))
       },
       onDisconnected: () => this.handleGuestLeft(guestSocketId),
     })
@@ -134,6 +138,11 @@ export class HostSession {
         this.spriteManager.setHidden(msg.instanceId, msg.hidden)
         break
       }
+      case 'sprite:zorder': {
+        useRoomStore.getState().setZOrder(msg.instanceId, msg.zOrder)
+        this.spriteManager.setZOrder(msg.instanceId, msg.zOrder)
+        break
+      }
       case 'sprite:drag': {
         this.spriteManager.move(msg.instanceId, msg.col, msg.row)
         break
@@ -176,6 +185,30 @@ export class HostSession {
         break
       }
       case 'prop:snapshot': {
+        // Host never receives a snapshot — ignore defensively
+        break
+      }
+      case 'roof:place': {
+        useRoomStore.getState().placeRoof(msg.roof)
+        this.roofManager.place(msg.roof)
+        break
+      }
+      case 'roof:remove': {
+        useRoomStore.getState().removeRoof(msg.instanceId)
+        this.roofManager.remove(msg.instanceId)
+        break
+      }
+      case 'roof:visible': {
+        useRoomStore.getState().setRoofVisible(msg.instanceId, msg.visible)
+        this.roofManager.setVisible(msg.instanceId, msg.visible)
+        break
+      }
+      case 'roof:tile': {
+        useRoomStore.getState().setRoofTile(msg.instanceId, msg.tileId)
+        this.roofManager.setTile(msg.instanceId, msg.tileId)
+        break
+      }
+      case 'roof:snapshot': {
         // Host never receives a snapshot — ignore defensively
         break
       }

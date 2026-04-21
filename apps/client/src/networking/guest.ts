@@ -7,6 +7,7 @@ import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
 import { type PropManager, getPropCategory } from '../babylon/props'
+import type { RoofManager } from '../babylon/roofs'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
 
@@ -22,6 +23,7 @@ export class GuestSession {
     private spriteManager: SpriteManager,
     private buildingManager: BuildingManager,
     private propManager: PropManager,
+    private roofManager: RoofManager,
     private cursorManager: CursorManager,
     onConnected: () => void,
     onHostDisconnected: () => void,
@@ -126,6 +128,11 @@ export class GuestSession {
         this.spriteManager.setHidden(msg.instanceId, msg.hidden)
         break
       }
+      case 'sprite:zorder': {
+        useRoomStore.getState().setZOrder(msg.instanceId, msg.zOrder)
+        this.spriteManager.setZOrder(msg.instanceId, msg.zOrder)
+        break
+      }
       case 'sprite:drag': {
         this.spriteManager.move(msg.instanceId, msg.col, msg.row)
         break
@@ -182,6 +189,31 @@ export class GuestSession {
       case 'prop:snapshot': {
         useRoomStore.getState().loadPropSnapshot(msg.props)
         this.propManager.loadSnapshot(msg.props, getPropCategory, this.buildingManager)
+        break
+      }
+      case 'roof:place': {
+        useRoomStore.getState().placeRoof(msg.roof)
+        this.roofManager.place(msg.roof)
+        break
+      }
+      case 'roof:remove': {
+        useRoomStore.getState().removeRoof(msg.instanceId)
+        this.roofManager.remove(msg.instanceId)
+        break
+      }
+      case 'roof:visible': {
+        useRoomStore.getState().setRoofVisible(msg.instanceId, msg.visible)
+        this.roofManager.setVisible(msg.instanceId, msg.visible)
+        break
+      }
+      case 'roof:tile': {
+        useRoomStore.getState().setRoofTile(msg.instanceId, msg.tileId)
+        this.roofManager.setTile(msg.instanceId, msg.tileId)
+        break
+      }
+      case 'roof:snapshot': {
+        useRoomStore.getState().loadRoofSnapshot(msg.roofs)
+        this.roofManager.loadSnapshot(msg.roofs)
         break
       }
     }
