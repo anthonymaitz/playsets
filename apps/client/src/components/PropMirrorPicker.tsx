@@ -31,11 +31,11 @@ export function PropMirrorPicker({ instanceId, screenX, screenY, isHost, onMirro
   return (
     <>
       <button
-        onPointerDown={(e) => { e.stopPropagation(); onMirror(instanceId, false) }}
+        onPointerDown={(e) => { e.stopPropagation(); onMirror(instanceId, true) }}
         style={{ ...BTN, left: screenX - 56 - 26, top: screenY + 44 - 18 }}
       >↙</button>
       <button
-        onPointerDown={(e) => { e.stopPropagation(); onMirror(instanceId, true) }}
+        onPointerDown={(e) => { e.stopPropagation(); onMirror(instanceId, false) }}
         style={{ ...BTN, left: screenX + 56 - 26, top: screenY + 44 - 18 }}
       >↘</button>
       {isHost && (

@@ -400,7 +400,9 @@ export function RoomPage() {
               cat === 'floor-object'
             const isFloorProp = cat === 'floor-decor' || cat === 'floor-object'
             const occupied = !isFloorProp && !!propManagerRef.current?.getInstanceIdAt(col, row)
-            if (canPlace && !occupied) {
+            const duplicateProp = isFloorProp && (propManagerRef.current?.getInstanceIdsAt(col, row) ?? [])
+              .some((id) => useRoomStore.getState().builderProps[id]?.propId === selectedP.id)
+            if (canPlace && !occupied && !duplicateProp) {
               const newId = nanoid()
               const facing = (cat === 'punch-through' || cat === 'wall-decor') ? getWallFacing(col, row) : 'x'
               const existingPropCount = isFloorProp ? (propManagerRef.current?.getInstanceIdsAt(col, row).length ?? 0) : 0
