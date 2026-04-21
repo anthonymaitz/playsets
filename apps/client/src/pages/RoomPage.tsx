@@ -3,7 +3,8 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { PointerEventTypes, Vector3, Matrix } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera } from '@babylonjs/core'
 import { BuildingManager } from '../babylon/buildings'
-import { PropManager } from '../babylon/props'
+import { PropManager, getPropCategory } from '../babylon/props'
+import { RoofManager } from '../babylon/roofs'
 import { BuildingControls } from '../components/BuildingControls'
 import { Sidebar } from '../components/Sidebar'
 import type { ScreenCorners } from '../components/BuildingControls'
@@ -22,9 +23,11 @@ import { DirectionPicker } from '../components/DirectionPicker'
 import { JoinDialog } from '../components/JoinDialog'
 import { TokenMenu } from '../components/token-menu/TokenMenu'
 import { TokenHUD } from '../components/TokenHUD'
+import { RoofMenu } from '../components/RoofMenu'
+import { StackBadge } from '../components/StackBadge'
 import { usePlayersStore } from '../store/players'
 import { useRoomStore } from '../store/room'
-import type { SpriteManifestEntry, FacingDir, WeatherType, BackgroundType } from '../types'
+import type { SpriteManifestEntry, FacingDir, WeatherType, BackgroundType, Roof } from '../types'
 import type { PropManifestEntry, TileManifestEntry } from '../types'
 import type { Mesh } from '@babylonjs/core'
 import { nanoid } from 'nanoid'
@@ -52,6 +55,43 @@ function isFloorCell(col: number, row: number): boolean {
   return Object.values(useRoomStore.getState().buildingTiles).some(
     (t) => t.col === col && t.row === row && t.tileId.includes('floor'),
   )
+}
+
+function getWallFacing(col: number, row: number): 'x' | 'west' | 'east' {
+  const tiles = Object.values(useRoomStore.getState().buildingTiles)
+  const hasZNeighborWalls = tiles.some(
+    (t) => t.col === col && (t.row === row - 1 || t.row === row + 1) && t.tileId.includes('wall'),
+  )
+  if (!hasZNeighborWalls) return 'x'
+  // z-axis wall: determine east vs west by which side has the room interior
+  const hasEastTile = tiles.some((t) => t.col === col + 1 && t.row === row)
+  return hasEastTile ? 'west' : 'east'
+}
+
+function getConnectedBuildingCells(startCol: number, startRow: number): Array<{ col: number; row: number }> {
+  const tiles = useRoomStore.getState().buildingTiles
+  const tileSet = new Set(Object.values(tiles).map((t) => `${t.col},${t.row}`))
+  if (!tileSet.has(`${startCol},${startRow}`)) return []
+  const visited = new Set<string>()
+  const result: Array<{ col: number; row: number }> = []
+  const queue = [{ col: startCol, row: startRow }]
+  while (queue.length) {
+    const { col, row } = queue.shift()!
+    const key = `${col},${row}`
+    if (visited.has(key) || !tileSet.has(key)) continue
+    visited.add(key)
+    result.push({ col, row })
+    queue.push({ col: col - 1, row }, { col: col + 1, row }, { col, row: row - 1 }, { col, row: row + 1 })
+  }
+  return result
+}
+
+function getRoofAtCell(col: number, row: number): Roof | null {
+  const { roofs } = useRoomStore.getState()
+  for (const roof of Object.values(roofs)) {
+    if (roof.cells.some((c) => c.col === col && c.row === row)) return roof
+  }
+  return null
 }
 
 export function RoomPage() {
@@ -104,12 +144,17 @@ export function RoomPage() {
   const [screenCorners, setScreenCorners] = useState<ScreenCorners | null>(null)
   const [selectedProp, setSelectedProp] = useState<PropManifestEntry | null>(null)
   const [tiles, setTiles] = useState<TileManifestEntry[]>([])
+  const [roofMenu, setRoofMenu] = useState<{ instanceId: string; x: number; y: number } | null>(null)
+  const [stackBadge, setStackBadge] = useState<{ instanceId: string } | null>(null)
   const selectedPropRef = useRef<PropManifestEntry | null>(null)
   const propManagerRef = useRef<PropManager | null>(null)
   const propModeRef = useRef(false)
-  const propDragRef = useRef<{ instanceId: string; lastCol: number; lastRow: number } | null>(null)
+  const propDragRef = useRef<{ instanceId: string; startCol: number; startRow: number; lastCol: number; lastRow: number } | null>(null)
+  const roofManagerRef = useRef<RoofManager | null>(null)
+  const roofModeRef = useRef(false)
 
   const sprites = useRoomStore((s) => s.sprites)
+  const roofs = useRoomStore((s) => s.roofs)
 
   const handleSelectSprite = (s: SpriteManifestEntry) => {
     setSelectedSprite(s)
@@ -170,6 +215,7 @@ export function RoomPage() {
     spriteManagerRef.current = spriteManager
     buildingManagerRef.current = new BuildingManager(scene)
     propManagerRef.current = new PropManager(scene)
+    roofManagerRef.current = new RoofManager(scene, isHost)
     const weatherSystem = new WeatherSystem(scene, ground, ambientLight, camera)
     weatherSystemRef.current = weatherSystem
     weatherSystem.setWeather('sunny')
@@ -193,10 +239,10 @@ export function RoomPage() {
       setDirectionPicker({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
     }
 
-    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu, buildingModeRef)
+    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu, setStackBadge, buildingModeRef)
     dragControllerRef.current = dragController
 
-    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker, buildingModeRef)
+    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker, setRoofMenu, setStackBadge, buildingModeRef)
 
     scene.onPointerObservable.add((info) => {
       // Prop drag preview (move meshes live as host drags a placed prop)
@@ -206,8 +252,21 @@ export function RoomPage() {
           const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
           const drag = propDragRef.current
           if (col !== drag.lastCol || row !== drag.lastRow) {
-            propManagerRef.current?.move(drag.instanceId, col, row, buildingManagerRef.current!)
-            propDragRef.current = { ...drag, lastCol: col, lastRow: row }
+            const propData = useRoomStore.getState().builderProps[drag.instanceId]
+            if (propData) {
+              const cat = getPropCategory(propData.propId)
+              const isWall = buildingManagerRef.current?.isWallAt(col, row) ?? false
+              const isFloor = isFloorCell(col, row)
+              const valid =
+                (cat === 'punch-through' && isWall) ||
+                (cat === 'wall-decor' && isWall) ||
+                (cat === 'floor-decor' && isFloor) ||
+                (cat === 'floor-object' && isFloor)
+              if (valid) {
+                propManagerRef.current?.move(drag.instanceId, col, row, buildingManagerRef.current!)
+                propDragRef.current = { ...drag, lastCol: col, lastRow: row }
+              }
+            }
           }
         }
         return
@@ -253,14 +312,67 @@ export function RoomPage() {
     })
 
     const handlePointerUp = (e: PointerEvent) => {
-      if (dragController.consumeJustDropped()) return
+      if (dragController.consumeJustDropped()) { propDragRef.current = null; return }
 
-      // Prop drag commit (host releases dragged prop)
+      // Prop drag commit or tap-to-remove (host releases prop)
       if (propDragRef.current) {
-        const { instanceId, lastCol, lastRow } = propDragRef.current
-        useRoomStore.getState().moveProp(instanceId, lastCol, lastRow)
-        sendMsg(sessionRef.current, { type: 'prop:move', instanceId, col: lastCol, row: lastRow })
+        const { instanceId, startCol, startRow, lastCol, lastRow } = propDragRef.current
         propDragRef.current = null
+        const moved = lastCol !== startCol || lastRow !== startRow
+        if (moved) {
+          useRoomStore.getState().moveProp(instanceId, lastCol, lastRow)
+          sendMsg(sessionRef.current, { type: 'prop:move', instanceId, col: lastCol, row: lastRow })
+        } else {
+          const existing = useRoomStore.getState().builderProps[instanceId]
+          if (existing && (existing.propId === 'door-wood' || existing.propId === 'window-wood')) {
+            // Tap on interactive prop → toggle open/close
+            const newState = { ...existing.state, open: !existing.state.open }
+            useRoomStore.getState().setPropState(instanceId, newState)
+            propManagerRef.current?.setState(instanceId, newState)
+            sendMsg(sessionRef.current, { type: 'prop:interact', instanceId, state: newState })
+          } else if (existing) {
+            // Tap on decorative prop → remove
+            useRoomStore.getState().removeProp(instanceId)
+            propManagerRef.current?.remove(instanceId, buildingManagerRef.current!)
+            sendMsg(sessionRef.current, { type: 'prop:remove', instanceId })
+          }
+        }
+        return
+      }
+
+      // Roof token tap → open RoofMenu
+      if (isHost) {
+        const roofTokenPick = scene.pick(scene.pointerX, scene.pointerY, (m) => !!m.metadata?.roofInstanceId)
+        if (roofTokenPick?.hit && roofTokenPick.pickedMesh?.metadata?.roofInstanceId) {
+          const roofInstanceId = roofTokenPick.pickedMesh.metadata.roofInstanceId as string
+          const rect = canvasRef.current?.getBoundingClientRect()
+          setRoofMenu({ instanceId: roofInstanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
+          return
+        }
+      }
+
+      // Roof placement (host in roof mode clicks building tile)
+      if (isHost && roofModeRef.current) {
+        const pick = scene.pick(scene.pointerX, scene.pointerY)
+        if (pick?.hit && pick.pickedPoint) {
+          const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+          const existingRoof = getRoofAtCell(col, row)
+          if (existingRoof) {
+            useRoomStore.getState().removeRoof(existingRoof.instanceId)
+            roofManagerRef.current?.remove(existingRoof.instanceId)
+            sendMsg(sessionRef.current, { type: 'roof:remove', instanceId: existingRoof.instanceId })
+          } else {
+            const cells = getConnectedBuildingCells(col, row)
+            if (cells.length > 0) {
+              const newId = nanoid()
+              const { localPlayer: lp } = usePlayersStore.getState()
+              const roof: Roof = { instanceId: newId, tileId: 'roof-thatch', cells, tokenCol: col, tokenRow: row, visible: true, createdBy: lp.playerId }
+              useRoomStore.getState().placeRoof(roof)
+              roofManagerRef.current?.place(roof)
+              sendMsg(sessionRef.current, { type: 'roof:place', roof })
+            }
+          }
+        }
         return
       }
 
@@ -268,7 +380,9 @@ export function RoomPage() {
       if (isHost && propModeRef.current) {
         const selectedP = selectedPropRef.current
         if (selectedP) {
-          const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => m.name === 'ground')
+          // Favor the mesh the cursor is actually over (wall face, floor tile, ground)
+          // rather than the ground plane, which gives wrong cells for elevated wall meshes
+          const pick = scene.pick(scene.pointerX, scene.pointerY, (m) => !m.metadata?.propInstanceId)
           if (pick?.hit && pick.pickedPoint) {
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
             const isWall = buildingManagerRef.current?.isWallAt(col, row) ?? false
@@ -279,16 +393,16 @@ export function RoomPage() {
               (cat === 'wall-decor' && isWall) ||
               (cat === 'floor-decor' && isFloor) ||
               (cat === 'floor-object' && isFloor)
-            if (canPlace) {
+            const occupied = !!propManagerRef.current?.getInstanceIdAt(col, row)
+            if (canPlace && !occupied) {
               const newId = nanoid()
-              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false } }
+              const facing = (cat === 'punch-through' || cat === 'wall-decor') ? getWallFacing(col, row) : 'x'
+              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false, facing } }
               useRoomStore.getState().placeProp(prop)
               propManagerRef.current?.place(prop, selectedP.category, buildingManagerRef.current!)
               sendMsg(sessionRef.current, { type: 'prop:place', prop })
             }
           }
-          setSelectedProp(null)
-          selectedPropRef.current = null
           return
         }
       }
@@ -319,7 +433,9 @@ export function RoomPage() {
       if (isWallCell(col, row)) return
       const newInstanceId = nanoid()
       const { localPlayer: lp } = usePlayersStore.getState()
-      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId }
+      const existingCount = Object.values(useRoomStore.getState().sprites)
+        .filter((s) => s.col === col && s.row === row).length
+      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId, zOrder: existingCount }
       useRoomStore.getState().placeSprite(instance)
       spriteManager.place(instance, sprite.path)
       sendMsg(sessionRef.current, { type: 'sprite:place', ...instance })
@@ -352,13 +468,18 @@ export function RoomPage() {
     }
 
     const handlePointerDown = (_e: PointerEvent) => {
-      if (!isHost || propModeRef.current || buildingModeRef.current) return
+      propDragRef.current = null  // clear stale state on every new press
+      if (!isHost || propModeRef.current || buildingModeRef.current || roofModeRef.current) return
+      if (selectedSpriteRef.current) return  // sprite placement takes priority
+      // Don't start prop drag when tapping roof token
+      const roofTokenPick = scene.pick(scene.pointerX, scene.pointerY, (m) => !!m.metadata?.roofInstanceId)
+      if (roofTokenPick?.hit) return
       const propPick = scene.pick(scene.pointerX, scene.pointerY, (m) => !!m.metadata?.propInstanceId)
       if (propPick?.hit && propPick.pickedMesh?.metadata?.propInstanceId) {
         const propInstanceId = propPick.pickedMesh.metadata.propInstanceId as string
         const prop = useRoomStore.getState().builderProps[propInstanceId]
         if (prop) {
-          propDragRef.current = { instanceId: propInstanceId, lastCol: prop.col, lastRow: prop.row }
+          propDragRef.current = { instanceId: propInstanceId, startCol: prop.col, startRow: prop.row, lastCol: prop.col, lastRow: prop.row }
         }
       }
     }
@@ -368,7 +489,7 @@ export function RoomPage() {
     document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
 
-    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, propManagerRef.current!, cursorManager, setConnected)
+    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, propManagerRef.current!, roofManagerRef.current!, cursorManager, setConnected)
 
     return () => {
       canvas.removeEventListener('pointerdown', handlePointerDown)
@@ -383,6 +504,8 @@ export function RoomPage() {
       buildingManagerRef.current = null
       propManagerRef.current?.dispose()
       propManagerRef.current = null
+      roofManagerRef.current?.dispose()
+      roofManagerRef.current = null
       weatherSystemRef.current?.dispose()
       weatherSystemRef.current = null
       spriteManagerRef.current = null
@@ -523,6 +646,31 @@ export function RoomPage() {
 
   const dispatchMsg = (msg: SessionMsg) => sendMsg(sessionRef.current, msg)
 
+  const handleAdvanceStack = () => {
+    if (!stackBadge) return
+    const { sprites } = useRoomStore.getState()
+    const sprite = sprites[stackBadge.instanceId]
+    if (!sprite) return
+
+    const stack = Object.values(sprites)
+      .filter((s) => s.col === sprite.col && s.row === sprite.row)
+      .sort((a, b) => (a.zOrder ?? 0) - (b.zOrder ?? 0))
+
+    if (stack.length <= 1) return
+
+    const idx = stack.findIndex((s) => s.instanceId === stackBadge.instanceId)
+    const nextIdx = (idx + 1) % stack.length
+    const currentZ = stack[idx].zOrder ?? 0
+    const nextZ = stack[nextIdx].zOrder ?? 0
+
+    useRoomStore.getState().setZOrder(stack[idx].instanceId, nextZ)
+    useRoomStore.getState().setZOrder(stack[nextIdx].instanceId, currentZ)
+    spriteManagerRef.current?.setZOrder(stack[idx].instanceId, nextZ)
+    spriteManagerRef.current?.setZOrder(stack[nextIdx].instanceId, currentZ)
+    dispatchMsg({ type: 'sprite:zorder', instanceId: stack[idx].instanceId, zOrder: nextZ })
+    dispatchMsg({ type: 'sprite:zorder', instanceId: stack[nextIdx].instanceId, zOrder: currentZ })
+  }
+
   if (needsName) return <JoinDialog onDone={() => setNeedsName(false)} />
 
   const activeSprite = tokenMenu ? sprites[tokenMenu.instanceId] : null
@@ -546,6 +694,7 @@ export function RoomPage() {
             previewEndRef.current = null
           }
         }}
+        onRoofModeChange={(active) => { roofModeRef.current = active }}
         buildPanel={{
           wallTileId,
           floorTileId,
@@ -599,6 +748,7 @@ export function RoomPage() {
           onRemove={(instanceId) => {
             dispatchMsg({ type: 'sprite:remove', instanceId })
             setTokenMenu(null)
+            setStackBadge(null)
           }}
         />
       )}
@@ -615,6 +765,40 @@ export function RoomPage() {
             setDirectionPicker(null)
           }}
           onDismiss={() => setDirectionPicker(null)}
+        />
+      )}
+      {roofMenu && roofs[roofMenu.instanceId] && (
+        <RoofMenu
+          instanceId={roofMenu.instanceId}
+          visible={roofs[roofMenu.instanceId].visible}
+          tileId={roofs[roofMenu.instanceId].tileId}
+          x={roofMenu.x}
+          y={roofMenu.y}
+          onToggleVisible={(instanceId, visible) => {
+            useRoomStore.getState().setRoofVisible(instanceId, visible)
+            roofManagerRef.current?.setVisible(instanceId, visible)
+            sendMsg(sessionRef.current, { type: 'roof:visible', instanceId, visible })
+          }}
+          onChangeTile={(instanceId, tileId) => {
+            useRoomStore.getState().setRoofTile(instanceId, tileId)
+            roofManagerRef.current?.setTile(instanceId, tileId)
+            sendMsg(sessionRef.current, { type: 'roof:tile', instanceId, tileId })
+          }}
+          onRemove={(instanceId) => {
+            useRoomStore.getState().removeRoof(instanceId)
+            roofManagerRef.current?.remove(instanceId)
+            sendMsg(sessionRef.current, { type: 'roof:remove', instanceId })
+          }}
+          onClose={() => setRoofMenu(null)}
+        />
+      )}
+      {stackBadge && sceneRef.current && (
+        <StackBadge
+          instanceId={stackBadge.instanceId}
+          scene={sceneRef.current}
+          canvasLeft={canvasRect.left}
+          canvasTop={canvasRect.top}
+          onAdvance={handleAdvanceStack}
         />
       )}
       {buildingMode && (
@@ -664,6 +848,7 @@ function setupDragController(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   showDirPickerAtPointer: (instanceId: string) => void,
   setTokenMenu: (m: TokenMenuState | null) => void,
+  setStackBadge: (b: { instanceId: string } | null) => void,
   buildingModeRef: React.MutableRefObject<boolean>,
 ): DragController {
   return new DragController(scene, spriteManager, camera, {
@@ -685,6 +870,12 @@ function setupDragController(
       const sy = (rect?.top ?? 0) + scene.pointerY
       setTokenMenu({ instanceId, x: sx, y: sy })
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
+      const { sprites } = useRoomStore.getState()
+      const tapped = sprites[instanceId]
+      if (tapped) {
+        const count = Object.values(sprites).filter((s) => s.col === tapped.col && s.row === tapped.row).length
+        setStackBadge(count > 1 ? { instanceId } : null)
+      }
     },
   })
 }
@@ -697,12 +888,16 @@ function setupScenePointerObservable(
   sessionRef: React.MutableRefObject<HostSession | GuestSession | null>,
   setTokenMenu: (m: TokenMenuState | null) => void,
   setDirectionPicker: (d: { instanceId: string; x: number; y: number } | null) => void,
+  setRoofMenu: (m: { instanceId: string; x: number; y: number } | null) => void,
+  setStackBadge: (b: { instanceId: string } | null) => void,
   buildingModeRef: React.MutableRefObject<boolean>,
 ): void {
   scene.onPointerObservable.add((info) => {
     if (info.type === PointerEventTypes.POINTERDOWN) {
       setDirectionPicker(null)
       setTokenMenu(null)
+      setRoofMenu(null)
+      setStackBadge(null)
     }
 
     if (info.type !== PointerEventTypes.POINTERMOVE) return
@@ -736,11 +931,12 @@ function createSession(
   spriteManager: SpriteManager,
   buildingManager: BuildingManager,
   propManager: PropManager,
+  roofManager: RoofManager,
   cursorManager: CursorManager,
   setConnected: (v: boolean) => void,
 ): HostSession | GuestSession | null {
   if (isHost) {
-    return new HostSession(scene, spriteManager, buildingManager, propManager, cursorManager, (newRoomId) => {
+    return new HostSession(scene, spriteManager, buildingManager, propManager, roofManager, cursorManager, (newRoomId) => {
       window.history.replaceState(null, '', `/room/${newRoomId}`)
       useRoomStore.getState().setRoomId(newRoomId)
     })
@@ -752,6 +948,7 @@ function createSession(
       spriteManager,
       buildingManager,
       propManager,
+      roofManager,
       cursorManager,
       () => setConnected(true),
       () => alert('Host disconnected'),
