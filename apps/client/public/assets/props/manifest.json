@@ -22,6 +22,14 @@
         { "id": "rug", "label": "Rug", "theme": "furniture", "category": "floor-decor" },
         { "id": "bartop", "label": "Bar Top", "theme": "furniture", "category": "floor-object" }
       ]
+    },
+    {
+      "id": "navigation",
+      "label": "Navigation",
+      "props": [
+        { "id": "stair-up", "label": "Stair Up", "theme": "navigation", "category": "floor-object" },
+        { "id": "stair-down", "label": "Stair Down", "theme": "navigation", "category": "floor-object" }
+      ]
     }
   ]
 }

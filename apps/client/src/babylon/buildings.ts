@@ -3,6 +3,7 @@ import { cellToWorld, CELL_SIZE } from './grid'
 import { generateRoomTiles, normalizeRect } from './buildingUtils'
 import type { BuildingTile } from '../types'
 import { nanoid } from 'nanoid'
+import { LAYER_HEIGHT } from './layers'
 
 const TILE_Y = 0.01
 
@@ -39,17 +40,18 @@ export class BuildingManager {
     return dt
   }
 
-  private createTilePlane(id: string, col: number, row: number, path: string, alpha = 1): Mesh {
+  private createTilePlane(id: string, col: number, row: number, path: string, layerIndex = 5, alpha = 1): Mesh {
     const isWall = path.includes('wall')
     const pos = cellToWorld(col, row)
     let mesh: Mesh
+    const layerY = (layerIndex - 5) * LAYER_HEIGHT
     if (isWall) {
       mesh = MeshBuilder.CreateBox(`btile-${id}`, { width: CELL_SIZE, height: 1.6, depth: CELL_SIZE }, this.scene)
-      mesh.position.set(pos.x, 0.8, pos.z)
+      mesh.position.set(pos.x, layerY + 0.8, pos.z)
     } else {
       mesh = MeshBuilder.CreatePlane(`btile-${id}`, { size: CELL_SIZE }, this.scene)
       mesh.rotation.x = Math.PI / 2
-      mesh.position.set(pos.x, TILE_Y, pos.z)
+      mesh.position.set(pos.x, layerY + TILE_Y, pos.z)
     }
     mesh.renderingGroupId = isWall ? 1 : 0
     const mat = new StandardMaterial(`bmat-${id}`, this.scene)
@@ -60,6 +62,7 @@ export class BuildingManager {
     mat.alpha = alpha
     mat.backFaceCulling = false
     mesh.material = mat
+    mesh.metadata = { layerIndex }
     return mesh
   }
 
@@ -68,7 +71,7 @@ export class BuildingManager {
     if (tile.tileId.includes('wall')) {
       this.wallPosTileId.set(`${tile.col},${tile.row}`, tile.instanceId)
     }
-    this.meshes.set(tile.instanceId, this.createTilePlane(tile.instanceId, tile.col, tile.row, path))
+    this.meshes.set(tile.instanceId, this.createTilePlane(tile.instanceId, tile.col, tile.row, path, tile.layerIndex ?? 5))
   }
 
   removeTile(instanceId: string): void {
@@ -256,7 +259,7 @@ export class BuildingManager {
     // (whose shared diagonal is not a wall) closes a concave perimeter gap.
     // Walls sit on painted floor tiles only; no new cells are added outside the room.
     const diags: [number, number][] = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-    for (const [key, entry] of posMap) {
+    for (const [, entry] of posMap) {
       if (entry.correctType !== 'floor') continue
       const col = entry.tile.col
       const row = entry.tile.row
@@ -302,6 +305,14 @@ export class BuildingManager {
   reset(): void {
     this.clearTiles()
     this.cancelPreview()
+  }
+
+  setLayerVisibility(layerIndex: number, visible: boolean): void {
+    for (const mesh of this.meshes.values()) {
+      if ((mesh.metadata?.layerIndex as number ?? 5) === layerIndex) {
+        mesh.isVisible = visible
+      }
+    }
   }
 
   dispose(): void {

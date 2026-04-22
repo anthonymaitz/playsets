@@ -13,6 +13,8 @@ const PROP_THUMB: Record<string, { bg: string; border: string; icon: string }> =
   'painting':    { bg: '#7a5a1e', border: '#c8a840', icon: '🖼️' },
   'rug':         { bg: '#7a2030', border: '#c03050', icon: '🔲' },
   'bartop':      { bg: '#3a2510', border: '#6b4520', icon: '🍺' },
+  'stair-up':    { bg: '#6b5a3a', border: '#a08050', icon: '⬆️' },
+  'stair-down':  { bg: '#4a3a2a', border: '#806040', icon: '⬇️' },
 }
 
 export function PropPicker({ selectedPropId, onSelect, onDeselect }: Props) {

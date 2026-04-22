@@ -2,6 +2,7 @@ import { Scene, MeshBuilder, StandardMaterial, Color3, Mesh, TransformNode } fro
 import type { BuilderProp, PropCategory } from '../types'
 import type { BuildingManager } from './buildings'
 import { cellToWorld } from './grid'
+import { LAYER_HEIGHT } from './layers'
 
 // ── Shared colors ────────────────────────────────────────────────────────────
 const FRAME_COLOR   = new Color3(0.42, 0.26, 0.13)   // wood frame
@@ -21,6 +22,8 @@ const PROP_CATEGORIES: Record<string, PropCategory> = {
   'painting':    'wall-decor',
   'rug':         'floor-decor',
   'bartop':      'floor-object',
+  'stair-up':    'floor-object',
+  'stair-down':  'floor-object',
 }
 
 /** Derive category from propId. Falls back to 'floor-object' for unknown props. */
@@ -49,8 +52,10 @@ export class PropManager {
     if (this.entries.has(prop.instanceId)) return
     const { x, z } = cellToWorld(prop.col, prop.row)
 
+    const layerY = ((prop.layerIndex ?? 5) - 5) * LAYER_HEIGHT
     const root = new TransformNode(`prop-root-${prop.instanceId}`, this.scene)
-    root.position.set(x, -(prop.zOrder ?? 0) * 0.03, z)
+    root.position.set(x, layerY - (prop.zOrder ?? 0) * 0.03, z)
+    root.metadata = { layerIndex: prop.layerIndex ?? 5 }
     // z-axis wall: west wall uses -90°, east wall uses +90°
     if (prop.state.facing === 'west') root.rotation.y = -Math.PI / 2
     else if (prop.state.facing === 'east') root.rotation.y = Math.PI / 2
@@ -80,6 +85,32 @@ export class PropManager {
       case 'bartop':
         ;({ allMeshes } = this.placeBartop(prop))
         break
+      case 'stair-up': {
+        const step1 = MeshBuilder.CreateBox(`stair-s1-${prop.instanceId}`, { width: 0.8, height: 0.2, depth: 0.8 }, this.scene)
+        step1.position.set(0, 0.1, 0)
+        const step2 = MeshBuilder.CreateBox(`stair-s2-${prop.instanceId}`, { width: 0.8, height: 0.4, depth: 0.4 }, this.scene)
+        step2.position.set(0, 0.2, -0.2)
+        const step3 = MeshBuilder.CreateBox(`stair-s3-${prop.instanceId}`, { width: 0.8, height: 0.6, depth: 0.4 }, this.scene)
+        step3.position.set(0, 0.3, -0.5)
+        const stairMat = new StandardMaterial(`stair-mat-${prop.instanceId}`, this.scene)
+        stairMat.diffuseColor = new Color3(0.6, 0.5, 0.35)
+        for (const m of [step1, step2, step3]) { m.material = stairMat; m.parent = root }
+        allMeshes = [step1, step2, step3]
+        break
+      }
+      case 'stair-down': {
+        const step1 = MeshBuilder.CreateBox(`stair-s1-${prop.instanceId}`, { width: 0.8, height: 0.2, depth: 0.8 }, this.scene)
+        step1.position.set(0, 0.1, 0)
+        const step2 = MeshBuilder.CreateBox(`stair-s2-${prop.instanceId}`, { width: 0.8, height: 0.4, depth: 0.4 }, this.scene)
+        step2.position.set(0, 0.2, 0.2)
+        const step3 = MeshBuilder.CreateBox(`stair-s3-${prop.instanceId}`, { width: 0.8, height: 0.6, depth: 0.4 }, this.scene)
+        step3.position.set(0, 0.3, 0.5)
+        const stairMat2 = new StandardMaterial(`stair-mat2-${prop.instanceId}`, this.scene)
+        stairMat2.diffuseColor = new Color3(0.5, 0.4, 0.28)
+        for (const m of [step1, step2, step3]) { m.material = stairMat2; m.parent = root }
+        allMeshes = [step1, step2, step3]
+        break
+      }
       default:
         console.warn(`[PropManager] Unknown propId: ${prop.propId}`)
         root.dispose()
@@ -162,6 +193,14 @@ export class PropManager {
   clear(buildingManager: BuildingManager): void {
     for (const instanceId of [...this.entries.keys()]) {
       this.remove(instanceId, buildingManager)
+    }
+  }
+
+  setLayerVisibility(layerIndex: number, visible: boolean): void {
+    for (const entry of this.entries.values()) {
+      if ((entry.root.metadata?.layerIndex as number ?? 5) === layerIndex) {
+        for (const mesh of entry.allMeshes) mesh.isVisible = visible
+      }
     }
   }
 
