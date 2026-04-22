@@ -93,7 +93,7 @@ export class SpriteManager {
     if (this.meshes.has(instance.instanceId)) return
     const { x, z } = cellToWorld(instance.col, instance.row)
     const isTerrain = instance.spriteId.startsWith('terrain/')
-    const hasDir = instance.spriteId.startsWith('tokens/')
+    const hasDir = instance.spriteId.startsWith('tokens/') || !!instance.definitionId
     const h = isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
 
     const facing: FacingDir = instance.facing ?? 's'
@@ -227,16 +227,19 @@ export class SpriteManager {
     if (!mesh) return
     const { isFront, isMirrored } = computeSpriteVariant(facing, snapIndex)
     const basePath = mesh.metadata.basePath as string
-    const spritePath = resolveSpritePath(basePath, isFront)
-    const tex = this.getTexture(spritePath)
-    tex.hasAlpha = true
-    ;(mesh.material as StandardMaterial).diffuseTexture = tex
+    // Data-URL tokens (custom builders) have no front/back variants — skip texture swap, keep mirroring
+    if (!basePath.startsWith('data:')) {
+      const spritePath = resolveSpritePath(basePath, isFront)
+      const tex = this.getTexture(spritePath)
+      tex.hasAlpha = true
+      ;(mesh.material as StandardMaterial).diffuseTexture = tex
+      const sp = this.tokenShadows.get(instanceId)
+      if (sp && sp.material instanceof StandardMaterial) {
+        ;(sp.material as StandardMaterial).diffuseTexture = tex
+      }
+    }
     mesh.scaling.x = isMirrored ? -1 : 1
     this.upsertIndicator(instanceId, mesh.position.x, mesh.position.z, facing)
-    const sp = this.tokenShadows.get(instanceId)
-    if (sp && sp.material instanceof StandardMaterial) {
-      ;(sp.material as StandardMaterial).diffuseTexture = tex
-    }
   }
 
   move(instanceId: string, col: number, row: number): void {

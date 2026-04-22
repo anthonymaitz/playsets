@@ -736,7 +736,9 @@ export function RoomPage() {
     if (!builderDefinition || !builderInstanceId) return
     useTokenStore.getState().addOrUpdate(builderDefinition)
     dispatchMsg({ type: 'token:define', definition: builderDefinition })
-    if (builderIsNewTokenRef.current) {
+    const savedInstanceId = builderInstanceId
+    const wasNew = builderIsNewTokenRef.current
+    if (wasNew) {
       const sprite = useRoomStore.getState().sprites[builderInstanceId]
       if (sprite) dispatchMsg({ type: 'sprite:place', ...sprite })
     }
@@ -746,6 +748,10 @@ export function RoomPage() {
     setBuilderDefinition(null)
     setBuilderOriginalDef(null)
     resetCameraZoom()
+    if (wasNew) {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (rect) setDirectionPicker({ instanceId: savedInstanceId, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+    }
   }
 
   const handleBuilderCancel = () => {
