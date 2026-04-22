@@ -6,45 +6,17 @@ export const CELL_SIZE = 1
 const GROUND_SIZE = 1000
 
 function drawGridCell(ctx: CanvasRenderingContext2D, size: number, type: BackgroundType): void {
-  let lineColor = '#4a5558'
+  // Transparent fill — LayerBackgroundManager handles background colors
+  ctx.clearRect(0, 0, size, size)
 
+  // Grid line color adapts to the scene mood, but fill comes from layer backgrounds
+  let lineColor: string
   switch (type) {
-    case 'grass':
-      ctx.fillStyle = '#2d5a1b'
-      ctx.fillRect(0, 0, size, size)
-      lineColor = '#4a7a40'
-      break
-    case 'stars':
-      // Near-black space; star overlay is separate
-      ctx.fillStyle = '#020008'
-      ctx.fillRect(0, 0, size, size)
-      lineColor = '#0a0a18'
-      break
-    case 'ocean':
-      ctx.fillStyle = '#0c2e52'
-      ctx.fillRect(0, 0, size, size)
-      lineColor = '#1a4875'
-      break
-    case 'snow':
-      ctx.fillStyle = '#d0dce8'
-      ctx.fillRect(0, 0, size, size)
-      lineColor = '#8aa0b8'
-      break
-    case 'lava': {
-      ctx.fillStyle = '#120300'
-      ctx.fillRect(0, 0, size, size)
-      ctx.strokeStyle = 'rgba(255,100,0,0.45)'
-      ctx.lineWidth = 1
-      const cracks: [number, number, number, number][] = [
-        [20, 30, 90, 80], [150, 10, 200, 60], [60, 140, 100, 190],
-        [180, 160, 240, 210], [10, 200, 50, 240], [120, 220, 180, 256], [200, 90, 240, 130],
-      ]
-      for (const [x1, y1, x2, y2] of cracks) {
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
-      }
-      lineColor = '#4a1200'
-      break
-    }
+    case 'stars': lineColor = 'rgba(100,120,220,0.18)'; break
+    case 'ocean': lineColor = 'rgba(80,160,240,0.20)'; break
+    case 'snow':  lineColor = 'rgba(200,220,240,0.25)'; break
+    case 'lava':  lineColor = 'rgba(255,80,0,0.22)'; break
+    default:      lineColor = 'rgba(255,255,255,0.12)'; break
   }
 
   ctx.strokeStyle = lineColor
@@ -57,6 +29,7 @@ export function createGrid(scene: Scene): Mesh {
 
   const texSize = 256
   const tex = new DynamicTexture('grid-tex', { width: texSize, height: texSize }, scene, false)
+  tex.hasAlpha = true
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D
   drawGridCell(ctx, texSize, 'grass')
   tex.update()
@@ -67,6 +40,7 @@ export function createGrid(scene: Scene): Mesh {
 
   const mat = new StandardMaterial('ground-mat', scene)
   mat.diffuseTexture = tex
+  mat.useAlphaFromDiffuseTexture = true
   mat.specularColor = Color3.Black()
   ground.material = mat
 
@@ -79,6 +53,7 @@ export function setGridBackground(ground: Mesh, type: BackgroundType, scene: Sce
 
   const texSize = 256
   const tex = new DynamicTexture(`grid-tex-${type}`, { width: texSize, height: texSize }, scene, false)
+  tex.hasAlpha = true
   const ctx = tex.getContext() as unknown as CanvasRenderingContext2D
   drawGridCell(ctx, texSize, type)
   tex.update()
@@ -87,6 +62,7 @@ export function setGridBackground(ground: Mesh, type: BackgroundType, scene: Sce
   tex.uScale = GROUND_SIZE / CELL_SIZE
   tex.vScale = GROUND_SIZE / CELL_SIZE
   mat.diffuseTexture = tex
+  mat.useAlphaFromDiffuseTexture = true
   if (oldTex) oldTex.dispose()
 
   if (type === 'stars') return _setupStarOverlay(scene)

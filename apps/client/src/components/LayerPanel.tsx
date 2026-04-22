@@ -54,7 +54,7 @@ export function LayerPanel({ isHost, layers, activeLayerIndex, onSelectLayer, on
                 onClick={() => setBgPickerFor(bgPickerFor === layerIndex ? null : layerIndex)}
                 title="Set background"
                 style={{
-                  position: 'absolute', right: -16, top: 4,
+                  position: 'absolute', left: -18, top: 4,
                   background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
                   borderRadius: 3, color: 'rgba(255,255,255,0.5)', fontSize: 9,
                   cursor: 'pointer', padding: '1px 3px', lineHeight: 1,
@@ -65,7 +65,7 @@ export function LayerPanel({ isHost, layers, activeLayerIndex, onSelectLayer, on
             )}
             {bgPickerFor === layerIndex && isHost && (
               <div style={{
-                position: 'absolute', right: 52, top: 0,
+                position: 'absolute', right: 54, top: 0,
                 background: 'rgba(10,15,10,0.96)', border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: 6, padding: 6, display: 'flex', flexDirection: 'column', gap: 4,
                 zIndex: 20, minWidth: 100,
