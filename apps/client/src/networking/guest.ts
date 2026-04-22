@@ -10,6 +10,7 @@ import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
 import { type PropManager, getPropCategory } from '../babylon/props'
 import type { RoofManager } from '../babylon/roofs'
+import type { LayerBackgroundManager } from '../babylon/layers'
 import { showEmote } from '../babylon/emotes'
 import type { Scene } from '@babylonjs/core'
 
@@ -26,6 +27,7 @@ export class GuestSession {
     private buildingManager: BuildingManager,
     private propManager: PropManager,
     private roofManager: RoofManager,
+    private layerBackgroundManager: LayerBackgroundManager,
     private cursorManager: CursorManager,
     onConnected: () => void,
     onHostDisconnected: () => void,
@@ -94,6 +96,7 @@ export class GuestSession {
           instanceId: msg.instanceId, spriteId: msg.spriteId,
           col: msg.col, row: msg.row, placedBy: msg.placedBy,
           zOrder: msg.zOrder, definitionId: msg.definitionId,
+          layerIndex: msg.layerIndex,
         }
         roomStore.placeSprite(instance)
         const def2 = msg.definitionId ? (useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} }) : null
@@ -103,8 +106,9 @@ export class GuestSession {
         break
       }
       case 'sprite:move': {
-        roomStore.moveSprite(msg.instanceId, msg.col, msg.row)
+        roomStore.moveSprite(msg.instanceId, msg.col, msg.row, msg.layerIndex)
         this.spriteManager.move(msg.instanceId, msg.col, msg.row)
+        if (msg.layerIndex !== undefined) this.spriteManager.setLayer(msg.instanceId, msg.layerIndex)
         break
       }
       case 'sprite:remove': {
@@ -257,6 +261,27 @@ export class GuestSession {
               this.spriteManager.setTokenDataUrls(s.instanceId, url, compositeToDataUrl(def, false))
             }
           }
+        }
+        break
+      }
+      case 'layer:config': {
+        useRoomStore.getState().updateLayerConfig(msg.layerIndex, { background: msg.background, visible: msg.visible })
+        this.layerBackgroundManager.updateLayer(msg.layerIndex, { background: msg.background, visible: msg.visible })
+        if (msg.visible !== undefined) {
+          this.spriteManager.setLayerVisibility(msg.layerIndex, msg.visible)
+          this.buildingManager.setLayerVisibility(msg.layerIndex, msg.visible)
+          this.propManager.setLayerVisibility(msg.layerIndex, msg.visible)
+        }
+        break
+      }
+      case 'layer:snapshot': {
+        useRoomStore.getState().loadLayerSnapshot(msg.configs)
+        this.layerBackgroundManager.loadConfigs(msg.configs)
+        for (let i = 1; i <= 9; i++) {
+          const visible = msg.configs[i]?.visible ?? true
+          this.spriteManager.setLayerVisibility(i, visible)
+          this.buildingManager.setLayerVisibility(i, visible)
+          this.propManager.setLayerVisibility(i, visible)
         }
         break
       }

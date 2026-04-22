@@ -1,4 +1,4 @@
-import type { GameMessage, SpriteInstance, Player, BuildingTile, BuilderProp, Roof, TokenDefinition } from '../types'
+import type { GameMessage, SpriteInstance, Player, BuildingTile, BuilderProp, Roof, TokenDefinition, LayerConfig } from '../types'
 import type { PeerConnection } from './peer'
 
 type PeerMap = Map<string, PeerConnection>
@@ -29,4 +29,8 @@ export function sendRoofSnapshot(peer: PeerConnection, roofs: Roof[]): void {
 
 export function sendTokenSnapshot(peer: PeerConnection, definitions: TokenDefinition[]): void {
   peer.sendReliable({ type: 'token:snapshot', definitions })
+}
+
+export function sendLayerSnapshot(peer: PeerConnection, configs: Record<number, LayerConfig>): void {
+  peer.sendReliable({ type: 'layer:snapshot', configs })
 }

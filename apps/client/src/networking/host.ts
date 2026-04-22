@@ -1,6 +1,6 @@
 import { SignalingClient } from './signaling'
 import { PeerConnection } from './peer'
-import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot, sendRoofSnapshot, sendTokenSnapshot } from './messages'
+import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot, sendRoofSnapshot, sendTokenSnapshot, sendLayerSnapshot } from './messages'
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
 import { useTokenStore } from '../store/tokens'
@@ -10,6 +10,7 @@ import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
 import { type PropManager, getPropCategory } from '../babylon/props'
 import type { RoofManager } from '../babylon/roofs'
+import type { LayerBackgroundManager } from '../babylon/layers'
 import { showEmote } from '../babylon/emotes'
 import { compositeToDataUrl } from '../babylon/tokenCompositor'
 import type { Scene } from '@babylonjs/core'
@@ -25,6 +26,7 @@ export class HostSession {
     private buildingManager: BuildingManager,
     private propManager: PropManager,
     private roofManager: RoofManager,
+    private layerBackgroundManager: LayerBackgroundManager,
     _cursorManager: CursorManager,
     onRoomCreated: (roomId: string) => void,
   ) {
@@ -58,6 +60,7 @@ export class HostSession {
         sendPropSnapshot(peer, Object.values(builderProps))
         sendRoofSnapshot(peer, Object.values(roofs))
         sendTokenSnapshot(peer, Object.values(useTokenStore.getState().definitions))
+        sendLayerSnapshot(peer, useRoomStore.getState().layers)
       }
     }).catch((err: unknown) => {
       console.error('Failed to re-register room after reconnect:', err)
@@ -78,6 +81,7 @@ export class HostSession {
         sendPropSnapshot(peer, Object.values(builderProps))
         sendRoofSnapshot(peer, Object.values(roofs))
         sendTokenSnapshot(peer, Object.values(useTokenStore.getState().definitions))
+        sendLayerSnapshot(peer, useRoomStore.getState().layers)
       },
       onDisconnected: () => this.handleGuestLeft(guestSocketId),
     })
@@ -103,6 +107,7 @@ export class HostSession {
           instanceId: msg.instanceId, spriteId: msg.spriteId,
           col: msg.col, row: msg.row, placedBy: msg.placedBy,
           zOrder: msg.zOrder, definitionId: msg.definitionId,
+          layerIndex: msg.layerIndex,
         }
         roomStore.placeSprite(instance)
         const defH = msg.definitionId ? (useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} }) : null
@@ -112,8 +117,10 @@ export class HostSession {
         break
       }
       case 'sprite:move': {
-        roomStore.moveSprite(msg.instanceId, msg.col, msg.row)
+        roomStore.moveSprite(msg.instanceId, msg.col, msg.row, msg.layerIndex)
         this.spriteManager.move(msg.instanceId, msg.col, msg.row)
+        if (msg.layerIndex !== undefined) this.spriteManager.setLayer(msg.instanceId, msg.layerIndex)
+        broadcastReliable(this.peers, msg)
         break
       }
       case 'sprite:remove': {
@@ -235,6 +242,17 @@ export class HostSession {
       }
       case 'player:join': {
         playersStore.addPlayer({ playerId: msg.playerId, displayName: msg.displayName, color: msg.color })
+        break
+      }
+      case 'layer:config': {
+        useRoomStore.getState().updateLayerConfig(msg.layerIndex, { background: msg.background, visible: msg.visible })
+        this.layerBackgroundManager.updateLayer(msg.layerIndex, { background: msg.background, visible: msg.visible })
+        if (msg.visible !== undefined) {
+          this.spriteManager.setLayerVisibility(msg.layerIndex, msg.visible)
+          this.buildingManager.setLayerVisibility(msg.layerIndex, msg.visible)
+          this.propManager.setLayerVisibility(msg.layerIndex, msg.visible)
+        }
+        broadcastReliable(this.peers, msg)
         break
       }
     }
