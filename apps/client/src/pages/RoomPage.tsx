@@ -166,6 +166,7 @@ export function RoomPage() {
   const [builderDefinition, setBuilderDefinition] = useState<TokenDefinition | null>(null)
   const [builderOriginalDef, setBuilderOriginalDef] = useState<TokenDefinition | null>(null)
   const [activeLayerIndex, setActiveLayerIndex] = useState(5)
+  const activeLayerIndexRef = useRef(5)
   const [tokenLayerMover, setTokenLayerMover] = useState<{ instanceId: string; x: number; y: number; layerIndex: number } | null>(null)
 
   const sprites = useRoomStore((s) => s.sprites)
@@ -209,6 +210,7 @@ export function RoomPage() {
   useEffect(() => { floorTileIdRef.current = floorTileId }, [floorTileId])
   useEffect(() => { mergeModeRef.current = mergeMode }, [mergeMode])
   useEffect(() => { propModeRef.current = selectedProp !== null }, [selectedProp])
+  useEffect(() => { activeLayerIndexRef.current = activeLayerIndex }, [activeLayerIndex])
 
   useEffect(() => {
     fetch('/assets/tiles/manifest.json')
@@ -427,7 +429,7 @@ export function RoomPage() {
               const newId = nanoid()
               const facing = (cat === 'punch-through' || cat === 'wall-decor') ? getWallFacing(col, row) : 'x'
               const existingPropCount = isFloorProp ? (propManagerRef.current?.getInstanceIdsAt(col, row).length ?? 0) : 0
-              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false, facing }, zOrder: existingPropCount }
+              const prop = { instanceId: newId, propId: selectedP.id, col, row, state: { open: false, facing }, zOrder: existingPropCount, layerIndex: activeLayerIndexRef.current }
               useRoomStore.getState().placeProp(prop)
               propManagerRef.current?.place(prop, selectedP.category, buildingManagerRef.current!)
               sendMsg(sessionRef.current, { type: 'prop:place', prop })
@@ -465,7 +467,7 @@ export function RoomPage() {
       const { localPlayer: lp } = usePlayersStore.getState()
       const existingCount = Object.values(useRoomStore.getState().sprites)
         .filter((s) => s.col === col && s.row === row).length
-      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId, zOrder: existingCount, layerIndex: activeLayerIndex }
+      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId, zOrder: existingCount, layerIndex: activeLayerIndexRef.current }
       useRoomStore.getState().placeSprite(instance)
       spriteManager.place(instance, sprite.path)
       sendMsg(sessionRef.current, { type: 'sprite:place', ...instance })
@@ -673,7 +675,7 @@ export function RoomPage() {
       session.localAction({ type: 'building:remove', instanceId })
     }
     for (const tile of tiles) {
-      session.localAction({ type: 'building:place', tile })
+      session.localAction({ type: 'building:place', tile: { ...tile, layerIndex: activeLayerIndexRef.current } })
     }
     previewEndRef.current = null
     setScreenCorners(null)
