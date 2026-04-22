@@ -83,7 +83,7 @@ export function Sidebar({
       {/* Panel */}
       <div style={{
         width: 220, background: 'rgba(10,15,10,0.92)', borderRight: '1px solid rgba(255,255,255,0.08)',
-        overflowY: 'auto', display: 'flex', flexDirection: 'column',
+        overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingTop: 48,
       }}>
         {activeTab === 'tokens' && (
           <>
