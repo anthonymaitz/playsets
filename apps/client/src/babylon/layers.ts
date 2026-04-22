@@ -79,7 +79,11 @@ export class LayerBackgroundManager {
   }
 
   private _disposePlane(plane: Mesh): void {
-    plane.material?.dispose()
+    if (plane.material) {
+      const mat = plane.material as StandardMaterial
+      mat.diffuseTexture?.dispose()
+      mat.dispose()
+    }
     plane.dispose()
   }
 
@@ -117,6 +121,7 @@ export class LayerBackgroundManager {
   }
 
   updateLayer(layerIndex: number, patch: Partial<LayerConfig>): void {
+    if (layerIndex < 1 || layerIndex > LAYER_COUNT) return
     this.configs[layerIndex] = { ...this.configs[layerIndex], ...patch }
     this._sync()
   }
