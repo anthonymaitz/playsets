@@ -26,6 +26,7 @@ interface Props {
   onWeatherChange: (w: WeatherType) => void
   activeBackground: BackgroundType
   onBackgroundChange: (b: BackgroundType) => void
+  onNewToken: () => void
   onBuildingModeChange: (active: boolean) => void
   onRoofModeChange: (active: boolean) => void
   buildPanel: BuildPanelProps
@@ -43,6 +44,7 @@ export function Sidebar({
   onWeatherChange,
   activeBackground,
   onBackgroundChange,
+  onNewToken,
   onBuildingModeChange,
   onRoofModeChange,
   buildPanel,
@@ -84,15 +86,29 @@ export function Sidebar({
         overflowY: 'auto', display: 'flex', flexDirection: 'column',
       }}>
         {activeTab === 'tokens' && (
-          <SpritePicker
-            selectedSpriteId={selectedSpriteId}
-            onSelect={onSpriteSelect}
-            onDeselect={onSpriteDeselect}
-            activeWeather={activeWeather}
-            onWeatherChange={onWeatherChange}
-            activeBackground={activeBackground}
-            onBackgroundChange={onBackgroundChange}
-          />
+          <>
+            <div style={{ padding: '10px 10px 0' }}>
+              <button
+                onClick={onNewToken}
+                style={{
+                  width: '100%', padding: '8px 0', borderRadius: 6, border: 'none',
+                  background: 'rgba(51,170,68,0.85)', color: '#fff', fontSize: 12,
+                  fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                + New Token
+              </button>
+            </div>
+            <SpritePicker
+              selectedSpriteId={selectedSpriteId}
+              onSelect={onSpriteSelect}
+              onDeselect={onSpriteDeselect}
+              activeWeather={activeWeather}
+              onWeatherChange={onWeatherChange}
+              activeBackground={activeBackground}
+              onBackgroundChange={onBackgroundChange}
+            />
+          </>
         )}
         {activeTab === 'build' && isHost && (
           <BuildPanel {...buildPanel} />

@@ -16,6 +16,7 @@ interface Props {
   onSpeech: (instanceId: string, speech: string) => void
   onToggleHide: (instanceId: string, hidden: boolean) => void
   onRemove: (instanceId: string) => void
+  onEditToken?: () => void
 }
 
 const LABEL: React.CSSProperties = {
@@ -34,7 +35,7 @@ const SECTION: React.CSSProperties = {
 export function TokenMenu({
   instanceId,
   activeStatuses, activeAnimation, currentSpeech, isHidden,
-  onEmote, onToggleStatus, onAnimate, onSpeech, onToggleHide, onRemove,
+  onEmote, onToggleStatus, onAnimate, onSpeech, onToggleHide, onRemove, onEditToken,
 }: Props) {
   return (
     <>
@@ -95,17 +96,27 @@ export function TokenMenu({
 
         <div style={SECTION}>
           <div style={LABEL}>Token</div>
-          <button
-            onPointerDown={(e) => { e.stopPropagation(); onRemove(instanceId) }}
-            style={{
-              height: 28, padding: '0 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              background: 'rgba(220,50,50,0.15)',
-              border: '1px solid rgba(220,50,50,0.4)',
-              borderRadius: 4, color: '#f87171', whiteSpace: 'nowrap',
-            }}
-          >
-            🗑 Remove
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {onEditToken && (
+              <button
+                onClick={onEditToken}
+                style={{ padding: '6px 14px', borderRadius: 5, border: 'none', background: 'rgba(74,144,217,0.8)', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Edit Token
+              </button>
+            )}
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); onRemove(instanceId) }}
+              style={{
+                height: 28, padding: '0 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                background: 'rgba(220,50,50,0.15)',
+                border: '1px solid rgba(220,50,50,0.4)',
+                borderRadius: 4, color: '#f87171', whiteSpace: 'nowrap',
+              }}
+            >
+              🗑 Remove
+            </button>
+          </div>
         </div>
       </div>
     </>

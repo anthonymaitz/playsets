@@ -10,7 +10,7 @@ import { Sidebar } from '../components/Sidebar'
 import type { ScreenCorners } from '../components/BuildingControls'
 import { normalizeRect } from '../babylon/buildingUtils'
 import { createScene } from '../babylon/scene'
-import { createGrid, setGridBackground, worldToCell } from '../babylon/grid'
+import { createGrid, setGridBackground, worldToCell, cellToWorld } from '../babylon/grid'
 import { SpriteManager } from '../babylon/sprites'
 import { WeatherSystem } from '../babylon/weather'
 import { DragController } from '../babylon/drag'
@@ -27,9 +27,12 @@ import { RoofMenu } from '../components/RoofMenu'
 import { StackBadge } from '../components/StackBadge'
 import { PropMirrorPicker } from '../components/PropMirrorPicker'
 import { PropStackBadge } from '../components/PropStackBadge'
+import { TokenBuilder } from '../components/TokenBuilder'
+import { compositeToDataUrl } from '../babylon/tokenCompositor'
 import { usePlayersStore } from '../store/players'
+import { useTokenStore } from '../store/tokens'
 import { useRoomStore } from '../store/room'
-import type { SpriteManifestEntry, FacingDir, WeatherType, BackgroundType, Roof } from '../types'
+import type { SpriteManifestEntry, FacingDir, WeatherType, BackgroundType, Roof, TokenDefinition } from '../types'
 import type { PropManifestEntry, TileManifestEntry } from '../types'
 import type { Mesh } from '@babylonjs/core'
 import { nanoid } from 'nanoid'
@@ -150,6 +153,11 @@ export function RoomPage() {
   const propDragRef = useRef<{ instanceId: string; startCol: number; startRow: number; lastCol: number; lastRow: number } | null>(null)
   const roofManagerRef = useRef<RoofManager | null>(null)
   const roofModeRef = useRef(false)
+  const cameraRef = useRef<ArcRotateCamera | null>(null)
+  const [builderOpen, setBuilderOpen] = useState(false)
+  const [builderInstanceId, setBuilderInstanceId] = useState<string | null>(null)
+  const [builderDefinition, setBuilderDefinition] = useState<TokenDefinition | null>(null)
+  const [builderOriginalDef, setBuilderOriginalDef] = useState<TokenDefinition | null>(null)
 
   const sprites = useRoomStore((s) => s.sprites)
   const roofs = useRoomStore((s) => s.roofs)
@@ -206,6 +214,7 @@ export function RoomPage() {
 
     bgCleanupRef.current = () => {}
     const { engine, scene, camera, ambientLight } = createScene(canvasRef.current)
+    cameraRef.current = camera
     sceneRef.current = scene
     const ground = createGrid(scene)
     groundRef.current = ground
@@ -658,6 +667,78 @@ export function RoomPage() {
 
   const dispatchMsg = (msg: SessionMsg) => sendMsg(sessionRef.current, msg)
 
+  const zoomToCell = (col: number, row: number) => {
+    const camera = cameraRef.current
+    if (!camera) return
+    const { x, z } = cellToWorld(col, row)
+    camera.target.set(x, 0, z)
+    camera.radius = 10
+  }
+
+  const resetCameraZoom = () => {
+    const camera = cameraRef.current
+    if (!camera) return
+    camera.target.set(0, 0, 0)
+    camera.radius = 24
+  }
+
+  const openBuilder = (instanceId: string, definition: TokenDefinition) => {
+    const sprite = useRoomStore.getState().sprites[instanceId]
+    setBuilderInstanceId(instanceId)
+    setBuilderDefinition(definition)
+    setBuilderOriginalDef(definition)
+    setBuilderOpen(true)
+    if (sprite) zoomToCell(sprite.col, sprite.row)
+  }
+
+  const handleNewToken = () => {
+    const { localPlayer } = usePlayersStore.getState()
+    const definitionId = nanoid()
+    const definition: TokenDefinition = { definitionId, ownedBy: localPlayer.playerId, layers: {} }
+    const instanceId = nanoid()
+    const { sprites } = useRoomStore.getState()
+    const col = 0, row = 0
+    const zOrder = Object.values(sprites).filter((s) => s.col === col && s.row === row).length
+    const instance = { instanceId, spriteId: 'custom', col, row, placedBy: localPlayer.playerId, zOrder, definitionId }
+    const url = compositeToDataUrl(definition)
+    useRoomStore.getState().placeSprite(instance)
+    spriteManagerRef.current?.place(instance, url)
+    useTokenStore.getState().addOrUpdate(definition)
+    dispatchMsg({ type: 'token:define', definition })
+    dispatchMsg({ type: 'sprite:place', ...instance })
+    openBuilder(instanceId, definition)
+  }
+
+  const handleBuilderChange = (newDef: TokenDefinition) => {
+    setBuilderDefinition(newDef)
+    if (!builderInstanceId) return
+    const url = compositeToDataUrl(newDef)
+    spriteManagerRef.current?.updateTexture(builderInstanceId, url)
+  }
+
+  const handleBuilderSave = () => {
+    if (!builderDefinition || !builderInstanceId) return
+    useTokenStore.getState().addOrUpdate(builderDefinition)
+    dispatchMsg({ type: 'token:define', definition: builderDefinition })
+    setBuilderOpen(false)
+    setBuilderInstanceId(null)
+    setBuilderDefinition(null)
+    setBuilderOriginalDef(null)
+    resetCameraZoom()
+  }
+
+  const handleBuilderCancel = () => {
+    if (builderOriginalDef && builderInstanceId) {
+      const url = compositeToDataUrl(builderOriginalDef)
+      spriteManagerRef.current?.updateTexture(builderInstanceId, url)
+    }
+    setBuilderOpen(false)
+    setBuilderInstanceId(null)
+    setBuilderDefinition(null)
+    setBuilderOriginalDef(null)
+    resetCameraZoom()
+  }
+
   const handleAdvanceStack = () => {
     if (!stackBadge) return
     const { sprites } = useRoomStore.getState()
@@ -753,6 +834,7 @@ export function RoomPage() {
         onWeatherChange={handleWeatherChange}
         activeBackground={currentBackground}
         onBackgroundChange={handleBackgroundChange}
+        onNewToken={handleNewToken}
         onBuildingModeChange={(active) => {
           setBuildingMode(active)
           if (!active) {
@@ -816,6 +898,14 @@ export function RoomPage() {
             setTokenMenu(null)
             setStackBadge(null)
           }}
+          onEditToken={
+            activeSprite?.definitionId
+              ? () => {
+                  const def = useTokenStore.getState().definitions[activeSprite.definitionId!]
+                  if (def) { setTokenMenu(null); openBuilder(tokenMenu!.instanceId, def) }
+                }
+              : undefined
+          }
         />
       )}
       {directionPicker && (
@@ -884,6 +974,14 @@ export function RoomPage() {
           canvasLeft={canvasRect.left}
           canvasTop={canvasRect.top}
           onAdvance={handleAdvancePropStack}
+        />
+      )}
+      {builderOpen && builderDefinition && (
+        <TokenBuilder
+          definition={builderDefinition}
+          onChange={handleBuilderChange}
+          onSave={handleBuilderSave}
+          onCancel={handleBuilderCancel}
         />
       )}
       {buildingMode && (
