@@ -2,6 +2,8 @@ import { SignalingClient } from './signaling'
 import { PeerConnection } from './peer'
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
+import { useTokenStore } from '../store/tokens'
+import { compositeToDataUrl } from '../babylon/tokenCompositor'
 import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
@@ -85,8 +87,16 @@ export class GuestSession {
         break
       }
       case 'sprite:place': {
-        roomStore.placeSprite({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy, zOrder: msg.zOrder })
-        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy, zOrder: msg.zOrder }, `/assets/sprites/${msg.spriteId}.svg`)
+        const instance = {
+          instanceId: msg.instanceId, spriteId: msg.spriteId,
+          col: msg.col, row: msg.row, placedBy: msg.placedBy,
+          zOrder: msg.zOrder, definitionId: msg.definitionId,
+        }
+        roomStore.placeSprite(instance)
+        const url = msg.definitionId
+          ? compositeToDataUrl(useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} })
+          : `/assets/sprites/${msg.spriteId}.svg`
+        this.spriteManager.place(instance, url)
         break
       }
       case 'sprite:move': {
@@ -219,6 +229,21 @@ export class GuestSession {
       case 'roof:snapshot': {
         useRoomStore.getState().loadRoofSnapshot(msg.roofs)
         this.roofManager.loadSnapshot(msg.roofs)
+        break
+      }
+      case 'token:define': {
+        useTokenStore.getState().addOrUpdate(msg.definition)
+        // Update texture for any sprites using this definition
+        for (const [, s] of Object.entries(roomStore.sprites)) {
+          if (s.definitionId === msg.definition.definitionId) {
+            const url = compositeToDataUrl(msg.definition)
+            this.spriteManager.updateTexture(s.instanceId, url)
+          }
+        }
+        break
+      }
+      case 'token:snapshot': {
+        useTokenStore.getState().loadSnapshot(msg.definitions)
         break
       }
     }

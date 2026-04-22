@@ -1,4 +1,4 @@
-import type { GameMessage, SpriteInstance, Player, BuildingTile, BuilderProp, Roof } from '../types'
+import type { GameMessage, SpriteInstance, Player, BuildingTile, BuilderProp, Roof, TokenDefinition } from '../types'
 import type { PeerConnection } from './peer'
 
 type PeerMap = Map<string, PeerConnection>
@@ -25,4 +25,8 @@ export function sendPropSnapshot(peer: PeerConnection, props: BuilderProp[]): vo
 
 export function sendRoofSnapshot(peer: PeerConnection, roofs: Roof[]): void {
   peer.sendReliable({ type: 'roof:snapshot', roofs })
+}
+
+export function sendTokenSnapshot(peer: PeerConnection, definitions: TokenDefinition[]): void {
+  peer.sendReliable({ type: 'token:snapshot', definitions })
 }

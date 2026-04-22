@@ -1,8 +1,9 @@
 import { SignalingClient } from './signaling'
 import { PeerConnection } from './peer'
-import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot, sendRoofSnapshot } from './messages'
+import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot, sendRoofSnapshot, sendTokenSnapshot } from './messages'
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
+import { useTokenStore } from '../store/tokens'
 import type { GameMessage } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
@@ -55,6 +56,7 @@ export class HostSession {
         sendBuildingSnapshot(peer, Object.values(buildingTiles))
         sendPropSnapshot(peer, Object.values(builderProps))
         sendRoofSnapshot(peer, Object.values(roofs))
+        sendTokenSnapshot(peer, Object.values(useTokenStore.getState().definitions))
       }
     }).catch((err: unknown) => {
       console.error('Failed to re-register room after reconnect:', err)
@@ -74,6 +76,7 @@ export class HostSession {
         const { builderProps, roofs } = useRoomStore.getState()
         sendPropSnapshot(peer, Object.values(builderProps))
         sendRoofSnapshot(peer, Object.values(roofs))
+        sendTokenSnapshot(peer, Object.values(useTokenStore.getState().definitions))
       },
       onDisconnected: () => this.handleGuestLeft(guestSocketId),
     })
@@ -215,6 +218,10 @@ export class HostSession {
       }
       case 'roof:snapshot': {
         // Host never receives a snapshot — ignore defensively
+        break
+      }
+      case 'token:define': {
+        useTokenStore.getState().addOrUpdate(msg.definition)
         break
       }
       case 'player:join': {
