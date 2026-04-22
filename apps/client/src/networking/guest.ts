@@ -79,7 +79,10 @@ export class GuestSession {
         playersStore.loadPlayers(msg.players)
         this.spriteManager.clear()
         for (const s of msg.sprites) {
-          this.spriteManager.place(s, `/assets/sprites/${s.spriteId}.svg`)
+          const url = s.definitionId
+            ? compositeToDataUrl(useTokenStore.getState().definitions[s.definitionId] ?? { definitionId: s.definitionId, ownedBy: s.placedBy, layers: {} })
+            : `/assets/sprites/${s.spriteId}.svg`
+          this.spriteManager.place(s, url)
           if (s.animation) this.spriteManager.setAnimation(s.instanceId, s.animation)
           if (s.hidden) this.spriteManager.setHidden(s.instanceId, true)
           if (s.statuses?.length) this.spriteManager.setStatuses(s.instanceId, s.statuses)
@@ -244,6 +247,15 @@ export class GuestSession {
       }
       case 'token:snapshot': {
         useTokenStore.getState().loadSnapshot(msg.definitions)
+        // Refresh textures for any sprites already placed that use these definitions
+        for (const def of msg.definitions) {
+          for (const [, s] of Object.entries(roomStore.sprites)) {
+            if (s.definitionId === def.definitionId) {
+              const url = compositeToDataUrl(def)
+              this.spriteManager.updateTexture(s.instanceId, url)
+            }
+          }
+        }
         break
       }
     }

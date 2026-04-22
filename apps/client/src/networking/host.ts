@@ -11,6 +11,7 @@ import type { CursorManager } from '../babylon/cursors'
 import { type PropManager, getPropCategory } from '../babylon/props'
 import type { RoofManager } from '../babylon/roofs'
 import { showEmote } from '../babylon/emotes'
+import { compositeToDataUrl } from '../babylon/tokenCompositor'
 import type { Scene } from '@babylonjs/core'
 
 export class HostSession {
@@ -98,8 +99,16 @@ export class HostSession {
 
     switch (msg.type) {
       case 'sprite:place': {
-        roomStore.placeSprite({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy, zOrder: msg.zOrder })
-        this.spriteManager.place({ instanceId: msg.instanceId, spriteId: msg.spriteId, col: msg.col, row: msg.row, placedBy: msg.placedBy, zOrder: msg.zOrder }, `/assets/sprites/${msg.spriteId}.svg`)
+        const instance = {
+          instanceId: msg.instanceId, spriteId: msg.spriteId,
+          col: msg.col, row: msg.row, placedBy: msg.placedBy,
+          zOrder: msg.zOrder, definitionId: msg.definitionId,
+        }
+        roomStore.placeSprite(instance)
+        const url = msg.definitionId
+          ? compositeToDataUrl(useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} })
+          : `/assets/sprites/${msg.spriteId}.svg`
+        this.spriteManager.place(instance, url)
         break
       }
       case 'sprite:move': {

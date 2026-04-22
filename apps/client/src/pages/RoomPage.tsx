@@ -154,6 +154,8 @@ export function RoomPage() {
   const roofManagerRef = useRef<RoofManager | null>(null)
   const roofModeRef = useRef(false)
   const cameraRef = useRef<ArcRotateCamera | null>(null)
+  const builderIsNewTokenRef = useRef(false)
+  const cameraPreOpenStateRef = useRef<{ target: { x: number; y: number; z: number }; radius: number } | null>(null)
   const [builderOpen, setBuilderOpen] = useState(false)
   const [builderInstanceId, setBuilderInstanceId] = useState<string | null>(null)
   const [builderDefinition, setBuilderDefinition] = useState<TokenDefinition | null>(null)
@@ -678,12 +680,26 @@ export function RoomPage() {
   const resetCameraZoom = () => {
     const camera = cameraRef.current
     if (!camera) return
-    camera.target.set(0, 0, 0)
-    camera.radius = 24
+    const saved = cameraPreOpenStateRef.current
+    if (saved) {
+      camera.target.set(saved.target.x, saved.target.y, saved.target.z)
+      camera.radius = saved.radius
+      cameraPreOpenStateRef.current = null
+    } else {
+      camera.target.set(0, 0, 0)
+      camera.radius = 24
+    }
   }
 
   const openBuilder = (instanceId: string, definition: TokenDefinition) => {
     const sprite = useRoomStore.getState().sprites[instanceId]
+    const camera = cameraRef.current
+    if (camera) {
+      cameraPreOpenStateRef.current = {
+        target: { x: camera.target.x, y: camera.target.y, z: camera.target.z },
+        radius: camera.radius,
+      }
+    }
     setBuilderInstanceId(instanceId)
     setBuilderDefinition(definition)
     setBuilderOriginalDef(definition)
@@ -704,8 +720,8 @@ export function RoomPage() {
     useRoomStore.getState().placeSprite(instance)
     spriteManagerRef.current?.place(instance, url)
     useTokenStore.getState().addOrUpdate(definition)
-    dispatchMsg({ type: 'token:define', definition })
-    dispatchMsg({ type: 'sprite:place', ...instance })
+    // Do NOT broadcast yet — wait until Save
+    builderIsNewTokenRef.current = true
     openBuilder(instanceId, definition)
   }
 
@@ -720,6 +736,11 @@ export function RoomPage() {
     if (!builderDefinition || !builderInstanceId) return
     useTokenStore.getState().addOrUpdate(builderDefinition)
     dispatchMsg({ type: 'token:define', definition: builderDefinition })
+    if (builderIsNewTokenRef.current) {
+      const sprite = useRoomStore.getState().sprites[builderInstanceId]
+      if (sprite) dispatchMsg({ type: 'sprite:place', ...sprite })
+    }
+    builderIsNewTokenRef.current = false
     setBuilderOpen(false)
     setBuilderInstanceId(null)
     setBuilderDefinition(null)
@@ -728,10 +749,16 @@ export function RoomPage() {
   }
 
   const handleBuilderCancel = () => {
-    if (builderOriginalDef && builderInstanceId) {
+    if (builderIsNewTokenRef.current && builderInstanceId) {
+      // Remove the ghost token — it was never broadcast, so no need to send remove
+      useRoomStore.getState().removeSprite(builderInstanceId)
+      spriteManagerRef.current?.remove(builderInstanceId)
+      useTokenStore.getState().remove(builderDefinition?.definitionId ?? '')
+    } else if (builderOriginalDef && builderInstanceId) {
       const url = compositeToDataUrl(builderOriginalDef)
       spriteManagerRef.current?.updateTexture(builderInstanceId, url)
     }
+    builderIsNewTokenRef.current = false
     setBuilderOpen(false)
     setBuilderInstanceId(null)
     setBuilderDefinition(null)
