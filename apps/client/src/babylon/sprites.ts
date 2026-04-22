@@ -77,6 +77,11 @@ export class SpriteManager {
   }
 
   private getTexture(path: string): Texture {
+    if (path.startsWith('data:')) {
+      const tex = new Texture(path, this.scene, false, true)
+      tex.hasAlpha = true
+      return tex
+    }
     const cached = this.textureCache.get(path)
     if (cached) return cached
     const tex = new Texture(path, this.scene, false, true)
@@ -194,6 +199,25 @@ export class SpriteManager {
     mesh.position.y = newY
     if (mesh.metadata?.baseY !== undefined) {
       mesh.metadata.baseY = newY
+    }
+  }
+
+  updateTexture(instanceId: string, url: string): void {
+    const mesh = this.meshes.get(instanceId)
+    if (!mesh) return
+    const mat = mesh.material as StandardMaterial
+    const oldTex = mat.diffuseTexture
+    const tex = new Texture(url, this.scene, false, true)
+    tex.hasAlpha = true
+    mat.diffuseTexture = tex
+    oldTex?.dispose()
+
+    const shadow = this.tokenShadows.get(instanceId)
+    if (shadow && shadow.material instanceof StandardMaterial) {
+      const sm = shadow.material as StandardMaterial
+      const oldShadowTex = sm.diffuseTexture
+      sm.diffuseTexture = new Texture(url, this.scene, false, true)
+      oldShadowTex?.dispose()
     }
   }
 
