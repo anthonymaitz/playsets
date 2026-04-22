@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import type { SpriteInstance, FacingDir, AnimationName, BuildingTile, BuilderProp, Roof, LayerConfig, LayerBackground } from '../types'
+import type { SpriteInstance, FacingDir, AnimationName, BuildingTile, BuilderProp, Roof, LayerConfig } from '../types'
 
 export const DEFAULT_LAYER_CONFIGS: Record<number, LayerConfig> = Object.fromEntries(
   Array.from({ length: 9 }, (_, i) => i + 1).map((i) => [
     i,
-    { background: i === 1 ? 'dirt' : i === 5 ? 'grass' : 'transparent' as LayerBackground, visible: true },
+    { background: i === 1 ? 'dirt' : i === 5 ? 'grass' : 'transparent', visible: true },
   ])
 )
 
@@ -167,12 +167,15 @@ export const useRoomStore = create<RoomStore>((set) => ({
   loadRoofSnapshot: (roofs) =>
     set({ roofs: Object.fromEntries(roofs.map((r) => [r.instanceId, r])) }),
   updateLayerConfig: (layerIndex, patch) =>
-    set((state) => ({
-      layers: {
-        ...state.layers,
-        [layerIndex]: { ...state.layers[layerIndex], ...patch },
-      },
-    })),
+    set((state) => {
+      if (!state.layers[layerIndex]) return state
+      return {
+        layers: {
+          ...state.layers,
+          [layerIndex]: { ...state.layers[layerIndex], ...patch },
+        },
+      }
+    }),
   loadLayerSnapshot: (configs) => set({ layers: configs }),
   reset: () => set({ roomId: null, sprites: {}, buildingTiles: {}, builderProps: {}, roofs: {}, layers: { ...DEFAULT_LAYER_CONFIGS } }),
 }))

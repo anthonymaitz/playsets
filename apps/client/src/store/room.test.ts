@@ -289,6 +289,12 @@ describe('useRoomStore — layers', () => {
     expect(useRoomStore.getState().sprites['i1'].layerIndex).toBe(7)
   })
 
+  it('updateLayerConfig ignores unknown layer index', () => {
+    const before = { ...useRoomStore.getState().layers }
+    useRoomStore.getState().updateLayerConfig(99, { visible: false })
+    expect(useRoomStore.getState().layers).toEqual(before)
+  })
+
   it('reset restores default layer configs', () => {
     useRoomStore.getState().updateLayerConfig(5, { visible: false })
     useRoomStore.getState().reset()
