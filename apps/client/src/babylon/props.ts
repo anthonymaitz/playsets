@@ -94,7 +94,7 @@ export class PropManager {
         step3.position.set(0, 0.3, -0.5)
         const stairMat = new StandardMaterial(`stair-mat-${prop.instanceId}`, this.scene)
         stairMat.diffuseColor = new Color3(0.6, 0.5, 0.35)
-        for (const m of [step1, step2, step3]) { m.material = stairMat; m.parent = root }
+        for (const m of [step1, step2, step3]) { m.material = stairMat }
         allMeshes = [step1, step2, step3]
         break
       }
@@ -107,7 +107,7 @@ export class PropManager {
         step3.position.set(0, 0.3, 0.5)
         const stairMat2 = new StandardMaterial(`stair-mat2-${prop.instanceId}`, this.scene)
         stairMat2.diffuseColor = new Color3(0.5, 0.4, 0.28)
-        for (const m of [step1, step2, step3]) { m.material = stairMat2; m.parent = root }
+        for (const m of [step1, step2, step3]) { m.material = stairMat2 }
         allMeshes = [step1, step2, step3]
         break
       }
