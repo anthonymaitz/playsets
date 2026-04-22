@@ -5,6 +5,10 @@ import type { Scene, ArcRotateCamera } from '@babylonjs/core'
 import { BuildingManager } from '../babylon/buildings'
 import { PropManager, getPropCategory } from '../babylon/props'
 import { RoofManager } from '../babylon/roofs'
+import { LayerBackgroundManager } from '../babylon/layers'
+import { LayerPanel } from '../components/LayerPanel'
+import { TokenLayerMover } from '../components/TokenLayerMover'
+import type { LayerBackground } from '../types'
 import { BuildingControls } from '../components/BuildingControls'
 import { Sidebar } from '../components/Sidebar'
 import type { ScreenCorners } from '../components/BuildingControls'
@@ -154,15 +158,19 @@ export function RoomPage() {
   const roofManagerRef = useRef<RoofManager | null>(null)
   const roofModeRef = useRef(false)
   const cameraRef = useRef<ArcRotateCamera | null>(null)
+  const layerBackgroundManagerRef = useRef<LayerBackgroundManager | null>(null)
   const builderIsNewTokenRef = useRef(false)
   const cameraPreOpenStateRef = useRef<{ target: { x: number; y: number; z: number }; radius: number } | null>(null)
   const [builderOpen, setBuilderOpen] = useState(false)
   const [builderInstanceId, setBuilderInstanceId] = useState<string | null>(null)
   const [builderDefinition, setBuilderDefinition] = useState<TokenDefinition | null>(null)
   const [builderOriginalDef, setBuilderOriginalDef] = useState<TokenDefinition | null>(null)
+  const [activeLayerIndex, setActiveLayerIndex] = useState(5)
+  const [tokenLayerMover, setTokenLayerMover] = useState<{ instanceId: string; x: number; y: number; layerIndex: number } | null>(null)
 
   const sprites = useRoomStore((s) => s.sprites)
   const roofs = useRoomStore((s) => s.roofs)
+  const layers = useRoomStore((s) => s.layers)
 
   const handleSelectSprite = (s: SpriteManifestEntry) => {
     setSelectedSprite(s)
@@ -225,6 +233,8 @@ export function RoomPage() {
     buildingManagerRef.current = new BuildingManager(scene)
     propManagerRef.current = new PropManager(scene)
     roofManagerRef.current = new RoofManager(scene, isHost)
+    const layerBgManager = new LayerBackgroundManager(scene, useRoomStore.getState().layers)
+    layerBackgroundManagerRef.current = layerBgManager
     const weatherSystem = new WeatherSystem(scene, ground, ambientLight, camera)
     weatherSystemRef.current = weatherSystem
     weatherSystem.setWeather('sunny')
@@ -248,10 +258,10 @@ export function RoomPage() {
       setDirectionPicker({ instanceId, x: (rect?.left ?? 0) + scene.pointerX, y: (rect?.top ?? 0) + scene.pointerY })
     }
 
-    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu, setStackBadge, buildingModeRef)
+    const dragController = setupDragController(scene, spriteManager, camera, sessionRef, canvasRef, showDirPickerAtPointer, setTokenMenu, setStackBadge, buildingModeRef, setTokenLayerMover)
     dragControllerRef.current = dragController
 
-    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker, setRoofMenu, setStackBadge, buildingModeRef)
+    setupScenePointerObservable(scene, spriteManager, dragController, selectedSpriteRef, sessionRef, setTokenMenu, setDirectionPicker, setRoofMenu, setStackBadge, buildingModeRef, setTokenLayerMover)
 
     scene.onPointerObservable.add((info) => {
       // Prop drag preview (move meshes live as host drags a placed prop)
@@ -455,7 +465,7 @@ export function RoomPage() {
       const { localPlayer: lp } = usePlayersStore.getState()
       const existingCount = Object.values(useRoomStore.getState().sprites)
         .filter((s) => s.col === col && s.row === row).length
-      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId, zOrder: existingCount }
+      const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId, zOrder: existingCount, layerIndex: activeLayerIndex }
       useRoomStore.getState().placeSprite(instance)
       spriteManager.place(instance, sprite.path)
       sendMsg(sessionRef.current, { type: 'sprite:place', ...instance })
@@ -512,7 +522,7 @@ export function RoomPage() {
     document.addEventListener('pointerup', handleDocPointerUp)
     window.addEventListener('keydown', handleKeyDown)
 
-    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, propManagerRef.current!, roofManagerRef.current!, cursorManager, setConnected)
+    sessionRef.current = createSession(isHost, roomId, scene, spriteManager, buildingManagerRef.current!, propManagerRef.current!, roofManagerRef.current!, layerBackgroundManagerRef.current!, cursorManager, setConnected)
 
     return () => {
       canvas.removeEventListener('pointerdown', handlePointerDown)
@@ -529,6 +539,8 @@ export function RoomPage() {
       propManagerRef.current = null
       roofManagerRef.current?.dispose()
       roofManagerRef.current = null
+      layerBackgroundManagerRef.current?.dispose()
+      layerBackgroundManagerRef.current = null
       weatherSystemRef.current?.dispose()
       weatherSystemRef.current = null
       spriteManagerRef.current = null
@@ -715,7 +727,7 @@ export function RoomPage() {
     const { sprites } = useRoomStore.getState()
     const col = 0, row = 0
     const zOrder = Object.values(sprites).filter((s) => s.col === col && s.row === row).length
-    const instance = { instanceId, spriteId: 'custom', col, row, placedBy: localPlayer.playerId, zOrder, definitionId }
+    const instance = { instanceId, spriteId: 'custom', col, row, placedBy: localPlayer.playerId, zOrder, definitionId, layerIndex: activeLayerIndex }
     const url = compositeToDataUrl(definition)
     const backUrl = compositeToDataUrl(definition, false)
     useRoomStore.getState().placeSprite(instance)
@@ -744,7 +756,7 @@ export function RoomPage() {
     const wasNew = builderIsNewTokenRef.current
     if (wasNew) {
       const sprite = useRoomStore.getState().sprites[builderInstanceId]
-      if (sprite) dispatchMsg({ type: 'sprite:place', ...sprite })
+      if (sprite) dispatchMsg({ type: 'sprite:place', ...sprite, layerIndex: sprite.layerIndex ?? activeLayerIndex })
     }
     builderIsNewTokenRef.current = false
     setBuilderOpen(false)
@@ -776,6 +788,30 @@ export function RoomPage() {
     setBuilderDefinition(null)
     setBuilderOriginalDef(null)
     resetCameraZoom()
+  }
+
+  const handleLayerSelect = (layerIndex: number) => {
+    setActiveLayerIndex(layerIndex)
+  }
+
+  const handleLayerToggleVisible = (layerIndex: number) => {
+    if (!isHost) return
+    const newVisible = !(layers[layerIndex]?.visible ?? true)
+    dispatchMsg({ type: 'layer:config', layerIndex, visible: newVisible })
+  }
+
+  const handleLayerSetBackground = (layerIndex: number, bg: LayerBackground) => {
+    if (!isHost) return
+    dispatchMsg({ type: 'layer:config', layerIndex, background: bg })
+  }
+
+  const handleMoveTokenLayer = (instanceId: string, newLayerIndex: number) => {
+    const sprite = useRoomStore.getState().sprites[instanceId]
+    if (!sprite) return
+    useRoomStore.getState().moveSprite(instanceId, sprite.col, sprite.row, newLayerIndex)
+    spriteManagerRef.current?.setLayer(instanceId, newLayerIndex)
+    sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col: sprite.col, row: sprite.row, layerIndex: newLayerIndex })
+    setTokenLayerMover((prev: { instanceId: string; x: number; y: number; layerIndex: number } | null) => prev ? { ...prev, layerIndex: newLayerIndex } : null)
   }
 
   const handleAdvanceStack = () => {
@@ -962,6 +998,19 @@ export function RoomPage() {
           onDismiss={() => setDirectionPicker(null)}
         />
       )}
+      {tokenLayerMover && (
+        <TokenLayerMover
+          instanceId={tokenLayerMover.instanceId}
+          layerIndex={tokenLayerMover.layerIndex}
+          x={tokenLayerMover.x}
+          y={tokenLayerMover.y}
+          canInteract={
+            !!usePlayersStore.getState().localPlayer &&
+            (isHost || useRoomStore.getState().sprites[tokenLayerMover.instanceId]?.placedBy === usePlayersStore.getState().localPlayer.playerId)
+          }
+          onMoveLayer={handleMoveTokenLayer}
+        />
+      )}
       {roofMenu && roofs[roofMenu.instanceId] && (
         <RoofMenu
           instanceId={roofMenu.instanceId}
@@ -1058,6 +1107,14 @@ export function RoomPage() {
           <p style={{ color: '#fff', fontSize: 20 }}>Connecting to host…</p>
         </div>
       )}
+      <LayerPanel
+        isHost={isHost}
+        layers={layers}
+        activeLayerIndex={activeLayerIndex}
+        onSelectLayer={handleLayerSelect}
+        onToggleVisible={handleLayerToggleVisible}
+        onSetBackground={handleLayerSetBackground}
+      />
     </>
   )
 }
@@ -1072,6 +1129,7 @@ function setupDragController(
   setTokenMenu: (m: TokenMenuState | null) => void,
   setStackBadge: (b: { instanceId: string } | null) => void,
   buildingModeRef: React.MutableRefObject<boolean>,
+  setTokenLayerMover: (m: { instanceId: string; x: number; y: number; layerIndex: number } | null) => void,
 ): DragController {
   return new DragController(scene, spriteManager, camera, {
     onDragMove: (instanceId, col, row) => {
@@ -1081,11 +1139,31 @@ function setupDragController(
     canDrop: (col, row) => !isWallCell(col, row),
     onDragDrop: (instanceId, col, row) => {
       if (buildingModeRef.current) return
-      useRoomStore.getState().moveSprite(instanceId, col, row)
-      sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
+
+      const { builderProps, sprites } = useRoomStore.getState()
+      const staircase = Object.values(builderProps).find(
+        (p) => p.col === col && p.row === row && (p.propId === 'stair-up' || p.propId === 'stair-down'),
+      )
+
+      const currentSprite = sprites[instanceId]
+      const currentLayer = currentSprite?.layerIndex ?? 5
+
+      if (staircase && currentSprite) {
+        const delta = staircase.propId === 'stair-up' ? 1 : -1
+        const newLayer = Math.max(1, Math.min(9, currentLayer + delta))
+        useRoomStore.getState().moveSprite(instanceId, col, row, newLayer)
+        spriteManager.move(instanceId, col, row)
+        spriteManager.setLayer(instanceId, newLayer)
+        sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row, layerIndex: newLayer })
+        setTokenLayerMover(null)
+      } else {
+        useRoomStore.getState().moveSprite(instanceId, col, row)
+        sendMsg(sessionRef.current, { type: 'sprite:move', instanceId, col, row })
+      }
+
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
-      const { sprites } = useRoomStore.getState()
-      const count = Object.values(sprites).filter((s) => s.col === col && s.row === row).length
+      const updatedSprites = useRoomStore.getState().sprites
+      const count = Object.values(updatedSprites).filter((s) => s.col === col && s.row === row).length
       setStackBadge(count > 1 ? { instanceId } : null)
     },
     onSpriteClick: (instanceId) => {
@@ -1094,6 +1172,10 @@ function setupDragController(
       const sx = (rect?.left ?? 0) + scene.pointerX
       const sy = (rect?.top ?? 0) + scene.pointerY
       setTokenMenu({ instanceId, x: sx, y: sy })
+      const spriteData = useRoomStore.getState().sprites[instanceId]
+      if (spriteData) {
+        setTokenLayerMover({ instanceId, x: sx, y: sy, layerIndex: spriteData.layerIndex ?? 5 })
+      }
       if (spriteManager.getMesh(instanceId)?.metadata?.hasDirections) showDirPickerAtPointer(instanceId)
       const { sprites } = useRoomStore.getState()
       const tapped = sprites[instanceId]
@@ -1116,6 +1198,7 @@ function setupScenePointerObservable(
   setRoofMenu: (m: { instanceId: string; x: number; y: number } | null) => void,
   setStackBadge: (b: { instanceId: string } | null) => void,
   buildingModeRef: React.MutableRefObject<boolean>,
+  setTokenLayerMover: (m: { instanceId: string; x: number; y: number; layerIndex: number } | null) => void,
 ): void {
   scene.onPointerObservable.add((info) => {
     if (info.type === PointerEventTypes.POINTERDOWN) {
@@ -1123,6 +1206,7 @@ function setupScenePointerObservable(
       setTokenMenu(null)
       setRoofMenu(null)
       setStackBadge(null)
+      setTokenLayerMover(null)
     }
 
     if (info.type !== PointerEventTypes.POINTERMOVE) return
@@ -1157,11 +1241,12 @@ function createSession(
   buildingManager: BuildingManager,
   propManager: PropManager,
   roofManager: RoofManager,
+  layerBackgroundManager: LayerBackgroundManager,
   cursorManager: CursorManager,
   setConnected: (v: boolean) => void,
 ): HostSession | GuestSession | null {
   if (isHost) {
-    return new HostSession(scene, spriteManager, buildingManager, propManager, roofManager, cursorManager, (newRoomId) => {
+    return new HostSession(scene, spriteManager, buildingManager, propManager, roofManager, layerBackgroundManager, cursorManager, (newRoomId) => {
       window.history.replaceState(null, '', `/room/${newRoomId}`)
       useRoomStore.getState().setRoomId(newRoomId)
     })
@@ -1174,6 +1259,7 @@ function createSession(
       buildingManager,
       propManager,
       roofManager,
+      layerBackgroundManager,
       cursorManager,
       () => setConnected(true),
       () => alert('Host disconnected'),
