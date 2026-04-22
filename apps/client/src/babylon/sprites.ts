@@ -13,6 +13,7 @@ import {
 } from '@babylonjs/core'
 import { cellToWorld, CELL_SIZE } from './grid'
 import { getCameraSnapIndex, computeSpriteVariant } from './cameraFacing'
+import { LAYER_HEIGHT } from './layers'
 import type { SpriteInstance, FacingDir, AnimationName } from '../types'
 
 const SPRITE_HEIGHT = CELL_SIZE * 1.6
@@ -113,7 +114,8 @@ export class SpriteManager {
       { width: CELL_SIZE * 0.9, height: h },
       this.scene,
     )
-    plane.position = new Vector3(x, h / 2 - (instance.zOrder ?? 0) * 0.03, z)
+    const layerY = ((instance.layerIndex ?? 5) - 5) * LAYER_HEIGHT
+    plane.position = new Vector3(x, layerY + h / 2 - (instance.zOrder ?? 0) * 0.03, z)
     plane.billboardMode = Mesh.BILLBOARDMODE_Y
     plane.renderingGroupId = 1
     if (initialMirrored) plane.scaling.x = -1
@@ -132,25 +134,29 @@ export class SpriteManager {
       basePath,
       hasDirections: hasDir,
       facing,
+      layerIndex: instance.layerIndex ?? 5,
+      isTerrain,
+      h,
+      zOrder: instance.zOrder ?? 0,
     }
     this.meshes.set(instance.instanceId, plane)
     if (this.shadowGen) this.shadowGen.addShadowCaster(plane)
 
-    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath)
+    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath, layerY)
 
-    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
+    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing, layerY)
 
     if (instance.hidden) this.setHidden(instance.instanceId, true)
   }
 
-  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string): void {
+  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string, layerY = 0): void {
     const sp = MeshBuilder.CreatePlane(`shadow-${instanceId}`, {
       width: CELL_SIZE * 0.9,
       height: SHADOW_LENGTH,
     }, this.scene)
     sp.rotation.x = SHADOW_ROT_X
     sp.rotation.y = SHADOW_ROT_Y
-    sp.position = new Vector3(x + SHADOW_OFFSET_X, 0.01, z + SHADOW_OFFSET_Z)
+    sp.position = new Vector3(x + SHADOW_OFFSET_X, layerY + 0.01, z + SHADOW_OFFSET_Z)
     const sm = new StandardMaterial(`shadow-mat-${instanceId}`, this.scene)
     sm.diffuseTexture = this.getTexture(spritePath)
     sm.useAlphaFromDiffuseTexture = true
@@ -165,12 +171,12 @@ export class SpriteManager {
     this.tokenShadows.set(instanceId, sp)
   }
 
-  private upsertIndicator(instanceId: string, x: number, z: number, facing: FacingDir): void {
+  private upsertIndicator(instanceId: string, x: number, z: number, facing: FacingDir, layerY = 0): void {
     let ind = this.indicators.get(instanceId)
     if (!ind) {
       ind = MeshBuilder.CreateDisc(`dir-${instanceId}`, { radius: 0.22, tessellation: 3 }, this.scene)
       ind.rotation.x = -Math.PI / 2
-      ind.position = new Vector3(x, 0.02, z)
+      ind.position = new Vector3(x, layerY + 0.02, z)
       const mat = new StandardMaterial(`dir-mat-${instanceId}`, this.scene)
       mat.diffuseColor = new Color3(1, 0.85, 0.1)
       mat.emissiveColor = new Color3(0.6, 0.5, 0)
@@ -180,6 +186,7 @@ export class SpriteManager {
     }
     ind.rotation.y = FACING_ANGLE[facing]
     ind.position.x = x
+    ind.position.y = layerY + 0.02
     ind.position.z = z
   }
 
@@ -194,12 +201,47 @@ export class SpriteManager {
   setZOrder(instanceId: string, zOrder: number): void {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
-    const h = mesh.metadata?.draggable === false ? TERRAIN_HEIGHT : SPRITE_HEIGHT
-    const newY = h / 2 - zOrder * 0.03
-    mesh.position.y = newY
-    if (mesh.metadata?.baseY !== undefined) {
-      mesh.metadata.baseY = newY
+    const h = (mesh.metadata?.isTerrain as boolean) ? TERRAIN_HEIGHT : SPRITE_HEIGHT
+    const layerY = ((mesh.metadata?.layerIndex as number ?? 5) - 5) * LAYER_HEIGHT
+    mesh.metadata.zOrder = zOrder
+    mesh.position.y = layerY + h / 2 - zOrder * 0.03
+  }
+
+  setLayer(instanceId: string, layerIndex: number): void {
+    const mesh = this.meshes.get(instanceId)
+    if (!mesh) return
+    mesh.metadata.layerIndex = layerIndex
+    const layerY = (layerIndex - 5) * LAYER_HEIGHT
+    const h: number = mesh.metadata.isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
+    const zOrder: number = mesh.metadata.zOrder ?? 0
+    mesh.position.y = layerY + h / 2 - zOrder * 0.03
+    const shadow = this.tokenShadows.get(instanceId)
+    if (shadow) shadow.position.y = layerY + 0.01
+    const ind = this.indicators.get(instanceId)
+    if (ind) ind.position.y = layerY + 0.02
+  }
+
+  setLayerVisibility(layerIndex: number, visible: boolean): void {
+    for (const [instanceId, mesh] of this.meshes) {
+      if ((mesh.metadata?.layerIndex as number ?? 5) !== layerIndex) continue
+      mesh.isVisible = visible
+      const shadow = this.tokenShadows.get(instanceId)
+      if (shadow) shadow.isVisible = visible && this.shadowsEnabled
+      const ind = this.indicators.get(instanceId)
+      if (ind) ind.isVisible = visible
     }
+  }
+
+  /** Update the front and back data URLs for a custom token, and refresh the visible texture. */
+  setTokenDataUrls(instanceId: string, frontUrl: string, backUrl: string): void {
+    const mesh = this.meshes.get(instanceId)
+    if (!mesh) return
+    mesh.metadata.frontDataUrl = frontUrl
+    mesh.metadata.backDataUrl = backUrl
+    // Refresh visible texture based on current facing
+    const facing: FacingDir = mesh.metadata.facing ?? 's'
+    const snapIndex = this.camera ? getCameraSnapIndex(this.camera.alpha) : 0
+    this._applyFacingVariant(instanceId, facing, snapIndex)
   }
 
   updateTexture(instanceId: string, url: string): void {
@@ -227,8 +269,26 @@ export class SpriteManager {
     if (!mesh) return
     const { isFront, isMirrored } = computeSpriteVariant(facing, snapIndex)
     const basePath = mesh.metadata.basePath as string
-    // Data-URL tokens (custom builders) have no front/back variants — skip texture swap, keep mirroring
-    if (!basePath.startsWith('data:')) {
+    if (basePath.startsWith('data:')) {
+      // Custom token — use stored front/back data URLs
+      const url: string = isFront
+        ? (mesh.metadata.frontDataUrl ?? basePath)
+        : (mesh.metadata.backDataUrl ?? mesh.metadata.frontDataUrl ?? basePath)
+      const mat = mesh.material as StandardMaterial
+      const oldTex = mat.diffuseTexture
+      const tex = new Texture(url, this.scene, false, true)
+      tex.hasAlpha = true
+      mat.diffuseTexture = tex
+      oldTex?.dispose()
+      const sp = this.tokenShadows.get(instanceId)
+      if (sp && sp.material instanceof StandardMaterial) {
+        const sm = sp.material as StandardMaterial
+        const oldShadowTex = sm.diffuseTexture
+        sm.diffuseTexture = new Texture(url, this.scene, false, true)
+        sm.diffuseTexture.hasAlpha = true
+        oldShadowTex?.dispose()
+      }
+    } else {
       const spritePath = resolveSpritePath(basePath, isFront)
       const tex = this.getTexture(spritePath)
       tex.hasAlpha = true
@@ -239,7 +299,8 @@ export class SpriteManager {
       }
     }
     mesh.scaling.x = isMirrored ? -1 : 1
-    this.upsertIndicator(instanceId, mesh.position.x, mesh.position.z, facing)
+    const layerY = ((mesh.metadata.layerIndex as number ?? 5) - 5) * LAYER_HEIGHT
+    this.upsertIndicator(instanceId, mesh.position.x, mesh.position.z, facing, layerY)
   }
 
   move(instanceId: string, col: number, row: number): void {
