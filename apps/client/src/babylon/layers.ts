@@ -122,7 +122,10 @@ export class LayerBackgroundManager {
 
   updateLayer(layerIndex: number, patch: Partial<LayerConfig>): void {
     if (layerIndex < 1 || layerIndex > LAYER_COUNT) return
-    this.configs[layerIndex] = { ...this.configs[layerIndex], ...patch }
+    const cleanPatch = Object.fromEntries(
+      Object.entries(patch).filter(([, v]) => v !== undefined)
+    ) as Partial<LayerConfig>
+    this.configs[layerIndex] = { ...this.configs[layerIndex], ...cleanPatch }
     this._sync()
   }
 

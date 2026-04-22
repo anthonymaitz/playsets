@@ -169,10 +169,13 @@ export const useRoomStore = create<RoomStore>((set) => ({
   updateLayerConfig: (layerIndex, patch) =>
     set((state) => {
       if (!state.layers[layerIndex]) return state
+      const cleanPatch = Object.fromEntries(
+        Object.entries(patch).filter(([, v]) => v !== undefined)
+      ) as Partial<LayerConfig>
       return {
         layers: {
           ...state.layers,
-          [layerIndex]: { ...state.layers[layerIndex], ...patch },
+          [layerIndex]: { ...state.layers[layerIndex], ...cleanPatch },
         },
       }
     }),

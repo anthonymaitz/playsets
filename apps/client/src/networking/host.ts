@@ -4,7 +4,7 @@ import { broadcastReliable, sendSnapshot, sendBuildingSnapshot, sendPropSnapshot
 import { useRoomStore } from '../store/room'
 import { usePlayersStore } from '../store/players'
 import { useTokenStore } from '../store/tokens'
-import type { GameMessage } from '../types'
+import type { GameMessage, LayerConfig } from '../types'
 import type { SpriteManager } from '../babylon/sprites'
 import type { BuildingManager } from '../babylon/buildings'
 import type { CursorManager } from '../babylon/cursors'
@@ -245,8 +245,11 @@ export class HostSession {
         break
       }
       case 'layer:config': {
-        useRoomStore.getState().updateLayerConfig(msg.layerIndex, { background: msg.background, visible: msg.visible })
-        this.layerBackgroundManager.updateLayer(msg.layerIndex, { background: msg.background, visible: msg.visible })
+        const patch: Partial<LayerConfig> = {}
+        if (msg.background !== undefined) patch.background = msg.background
+        if (msg.visible !== undefined) patch.visible = msg.visible
+        useRoomStore.getState().updateLayerConfig(msg.layerIndex, patch)
+        this.layerBackgroundManager.updateLayer(msg.layerIndex, patch)
         if (msg.visible !== undefined) {
           this.spriteManager.setLayerVisibility(msg.layerIndex, msg.visible)
           this.buildingManager.setLayerVisibility(msg.layerIndex, msg.visible)
