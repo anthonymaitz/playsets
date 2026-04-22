@@ -43,6 +43,12 @@ describe('useTokenStore', () => {
     expect(useTokenStore.getState().definitions['new1']).toBeDefined()
   })
 
+  it('loadSnapshot with empty array clears all definitions', () => {
+    useTokenStore.getState().addOrUpdate({ definitionId: 'd1', ownedBy: 'p1', layers: {} })
+    useTokenStore.getState().loadSnapshot([])
+    expect(Object.keys(useTokenStore.getState().definitions)).toHaveLength(0)
+  })
+
   it('reset clears all definitions', () => {
     useTokenStore.getState().addOrUpdate({ definitionId: 'd1', ownedBy: 'p1', layers: {} })
     useTokenStore.getState().reset()

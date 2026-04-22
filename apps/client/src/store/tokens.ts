@@ -11,8 +11,10 @@ interface TokenStore {
 
 export const useTokenStore = create<TokenStore>((set) => ({
   definitions: {},
-  addOrUpdate: (def) =>
-    set((s) => ({ definitions: { ...s.definitions, [def.definitionId]: def } })),
+  addOrUpdate: (def) => {
+    if (!def.definitionId) return
+    set((s) => ({ definitions: { ...s.definitions, [def.definitionId]: def } }))
+  },
   remove: (definitionId) =>
     set((s) => {
       const next = { ...s.definitions }
