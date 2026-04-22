@@ -226,11 +226,9 @@ export const SLOT_DEFS: SlotDef[] = [
         draw: (ctx, colors) => {
           const p = colors.primary ?? '#c8a415'
           fill(ctx, p, () => { ctx.roundRect(42, 28, 44, 14, 2) })
-          fill(ctx, p, () => {
-            ctx.moveTo(46, 28); ctx.lineTo(50, 10); ctx.lineTo(54, 28)
-            ctx.moveTo(60, 28); ctx.lineTo(64, 6); ctx.lineTo(68, 28)
-            ctx.moveTo(74, 28); ctx.lineTo(78, 10); ctx.lineTo(82, 28)
-          })
+          fill(ctx, p, () => { ctx.moveTo(46, 28); ctx.lineTo(50, 10); ctx.lineTo(54, 28); ctx.closePath() })
+          fill(ctx, p, () => { ctx.moveTo(60, 28); ctx.lineTo(64, 6); ctx.lineTo(68, 28); ctx.closePath() })
+          fill(ctx, p, () => { ctx.moveTo(74, 28); ctx.lineTo(78, 10); ctx.lineTo(82, 28); ctx.closePath() })
           fill(ctx, colors.secondary ?? '#cc3333', () => ellipse(ctx, 52, 21, 3, 4))
           fill(ctx, colors.secondary ?? '#cc3333', () => ellipse(ctx, 64, 17, 3, 4))
           fill(ctx, colors.secondary ?? '#cc3333', () => ellipse(ctx, 76, 21, 3, 4))
@@ -361,10 +359,8 @@ export const SLOT_DEFS: SlotDef[] = [
         id: 'off-shield',
         label: 'Shield',
         draw: (ctx, _colors) => {
-          fill(ctx, '#4a6fa5', () => {
-            ctx.roundRect(4, 82, 30, 40, 4)
-            ctx.moveTo(4, 120); ctx.lineTo(19, 138); ctx.lineTo(34, 120); ctx.closePath()
-          })
+          fill(ctx, '#4a6fa5', () => { ctx.roundRect(4, 82, 30, 40, 4) })
+          fill(ctx, '#4a6fa5', () => { ctx.moveTo(4, 120); ctx.lineTo(19, 138); ctx.lineTo(34, 120); ctx.closePath() })
           fill(ctx, '#2a3f5f', () => ctx.rect(18, 82, 3, 56))
           fill(ctx, '#c8a415', () => { ctx.roundRect(6, 84, 26, 4, 1) })
         },
