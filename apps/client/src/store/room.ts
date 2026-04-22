@@ -1,5 +1,12 @@
 import { create } from 'zustand'
-import type { SpriteInstance, FacingDir, AnimationName, BuildingTile, BuilderProp, Roof } from '../types'
+import type { SpriteInstance, FacingDir, AnimationName, BuildingTile, BuilderProp, Roof, LayerConfig, LayerBackground } from '../types'
+
+export const DEFAULT_LAYER_CONFIGS: Record<number, LayerConfig> = Object.fromEntries(
+  Array.from({ length: 9 }, (_, i) => i + 1).map((i) => [
+    i,
+    { background: i === 1 ? 'dirt' : i === 5 ? 'grass' : 'transparent' as LayerBackground, visible: true },
+  ])
+)
 
 interface RoomStore {
   roomId: string | null
@@ -7,9 +14,10 @@ interface RoomStore {
   buildingTiles: Record<string, BuildingTile>
   builderProps: Record<string, BuilderProp>
   roofs: Record<string, Roof>
+  layers: Record<number, LayerConfig>
   setRoomId: (id: string) => void
   placeSprite: (s: SpriteInstance) => void
-  moveSprite: (instanceId: string, col: number, row: number) => void
+  moveSprite: (instanceId: string, col: number, row: number, layerIndex?: number) => void
   faceSprite: (instanceId: string, facing: FacingDir) => void
   setStatuses: (instanceId: string, statuses: string[]) => void
   setSpeech: (instanceId: string, speech: string) => void
@@ -32,6 +40,8 @@ interface RoomStore {
   setRoofVisible: (instanceId: string, visible: boolean) => void
   setRoofTile: (instanceId: string, tileId: string) => void
   loadRoofSnapshot: (roofs: Roof[]) => void
+  updateLayerConfig: (layerIndex: number, patch: Partial<LayerConfig>) => void
+  loadLayerSnapshot: (configs: Record<number, LayerConfig>) => void
   reset: () => void
 }
 
@@ -41,14 +51,15 @@ export const useRoomStore = create<RoomStore>((set) => ({
   buildingTiles: {},
   builderProps: {},
   roofs: {},
+  layers: { ...DEFAULT_LAYER_CONFIGS },
   setRoomId: (id) => set({ roomId: id }),
   placeSprite: (s) => set((state) => ({ sprites: { ...state.sprites, [s.instanceId]: s } })),
-  moveSprite: (instanceId, col, row) =>
+  moveSprite: (instanceId, col, row, layerIndex) =>
     set((state) => {
       if (!state.sprites[instanceId]) return state
-      return {
-        sprites: { ...state.sprites, [instanceId]: { ...state.sprites[instanceId], col, row } },
-      }
+      const updated: SpriteInstance = { ...state.sprites[instanceId], col, row }
+      if (layerIndex !== undefined) updated.layerIndex = layerIndex
+      return { sprites: { ...state.sprites, [instanceId]: updated } }
     }),
   faceSprite: (instanceId, facing) =>
     set((state) => {
@@ -155,5 +166,13 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   loadRoofSnapshot: (roofs) =>
     set({ roofs: Object.fromEntries(roofs.map((r) => [r.instanceId, r])) }),
-  reset: () => set({ roomId: null, sprites: {}, buildingTiles: {}, builderProps: {}, roofs: {} }),
+  updateLayerConfig: (layerIndex, patch) =>
+    set((state) => ({
+      layers: {
+        ...state.layers,
+        [layerIndex]: { ...state.layers[layerIndex], ...patch },
+      },
+    })),
+  loadLayerSnapshot: (configs) => set({ layers: configs }),
+  reset: () => set({ roomId: null, sprites: {}, buildingTiles: {}, builderProps: {}, roofs: {}, layers: { ...DEFAULT_LAYER_CONFIGS } }),
 }))

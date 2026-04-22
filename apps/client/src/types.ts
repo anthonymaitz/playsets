@@ -3,6 +3,13 @@ export type AnimationName = 'dance' | 'sleep' | ''
 export type WeatherType = 'sunny' | 'cloudy' | 'night' | 'rain'
 export type BackgroundType = 'grass' | 'stars' | 'ocean' | 'snow' | 'lava'
 
+export type LayerBackground = 'transparent' | 'grass' | 'dirt'
+
+export interface LayerConfig {
+  background: LayerBackground
+  visible: boolean
+}
+
 export interface SpriteInstance {
   instanceId: string
   spriteId: string
@@ -16,6 +23,7 @@ export interface SpriteInstance {
   hidden?: boolean
   zOrder?: number
   definitionId?: string   // present when sprite is a custom token
+  layerIndex?: number
 }
 
 export interface Player {
@@ -46,6 +54,7 @@ export interface BuildingTile {
   tileId: string
   col: number
   row: number
+  layerIndex?: number
 }
 
 export type TileCategory = 'wall' | 'floor'
@@ -64,6 +73,7 @@ export interface BuilderProp {
   row: number
   state: Record<string, string | number | boolean>
   zOrder?: number
+  layerIndex?: number
 }
 
 export type PropCategory = 'punch-through' | 'wall-decor' | 'floor-decor' | 'floor-object'
@@ -116,8 +126,8 @@ export interface TokenDefinition {
 
 export type GameMessage =
   | { type: 'state:snapshot'; sprites: SpriteInstance[]; players: Player[] }
-  | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string; zOrder?: number; definitionId?: string }
-  | { type: 'sprite:move'; instanceId: string; col: number; row: number }
+  | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string; zOrder?: number; definitionId?: string; layerIndex?: number }
+  | { type: 'sprite:move'; instanceId: string; col: number; row: number; layerIndex?: number }
   | { type: 'sprite:remove'; instanceId: string }
   | { type: 'sprite:emote'; instanceId: string; emote: string }
   | { type: 'sprite:drag'; instanceId: string; col: number; row: number }
@@ -146,3 +156,5 @@ export type GameMessage =
   | { type: 'sprite:zorder'; instanceId: string; zOrder: number }
   | { type: 'token:define'; definition: TokenDefinition }
   | { type: 'token:snapshot'; definitions: TokenDefinition[] }
+  | { type: 'layer:config'; layerIndex: number; background?: LayerBackground; visible?: boolean }
+  | { type: 'layer:snapshot'; configs: Record<number, LayerConfig> }

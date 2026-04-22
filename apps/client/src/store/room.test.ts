@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useRoomStore } from './room'
+import type { LayerConfig, LayerBackground } from '../types'
 
 describe('useRoomStore', () => {
   beforeEach(() => {
@@ -238,5 +239,59 @@ describe('useRoomStore — roofs', () => {
     useRoomStore.getState().placeRoof(sampleRoof)
     useRoomStore.getState().reset()
     expect(Object.keys(useRoomStore.getState().roofs)).toHaveLength(0)
+  })
+})
+
+describe('useRoomStore — layers', () => {
+  beforeEach(() => {
+    useRoomStore.getState().reset()
+  })
+
+  it('starts with default layer configs', () => {
+    const { layers } = useRoomStore.getState()
+    expect(layers[5]).toEqual({ background: 'grass', visible: true })
+    expect(layers[1]).toEqual({ background: 'dirt', visible: true })
+    expect(layers[3]).toEqual({ background: 'transparent', visible: true })
+  })
+
+  it('updateLayerConfig patches a single layer', () => {
+    useRoomStore.getState().updateLayerConfig(3, { background: 'grass' })
+    expect(useRoomStore.getState().layers[3].background).toBe('grass')
+    expect(useRoomStore.getState().layers[3].visible).toBe(true)
+  })
+
+  it('updateLayerConfig toggling visible preserves background', () => {
+    useRoomStore.getState().updateLayerConfig(5, { visible: false })
+    expect(useRoomStore.getState().layers[5]).toEqual({ background: 'grass', visible: false })
+  })
+
+  it('loadLayerSnapshot replaces all configs', () => {
+    const newConfigs: Record<number, LayerConfig> = Object.fromEntries(
+      Array.from({ length: 9 }, (_, i) => [i + 1, { background: 'transparent' as LayerBackground, visible: false }])
+    )
+    useRoomStore.getState().loadLayerSnapshot(newConfigs)
+    expect(useRoomStore.getState().layers[5].background).toBe('transparent')
+    expect(useRoomStore.getState().layers[5].visible).toBe(false)
+  })
+
+  it('moveSprite with layerIndex updates layerIndex on sprite', () => {
+    useRoomStore.getState().placeSprite({ instanceId: 'i1', spriteId: 's1', col: 0, row: 0, placedBy: 'p1', layerIndex: 5 })
+    useRoomStore.getState().moveSprite('i1', 2, 3, 6)
+    const s = useRoomStore.getState().sprites['i1']
+    expect(s.col).toBe(2)
+    expect(s.row).toBe(3)
+    expect(s.layerIndex).toBe(6)
+  })
+
+  it('moveSprite without layerIndex preserves existing layerIndex', () => {
+    useRoomStore.getState().placeSprite({ instanceId: 'i1', spriteId: 's1', col: 0, row: 0, placedBy: 'p1', layerIndex: 7 })
+    useRoomStore.getState().moveSprite('i1', 1, 1)
+    expect(useRoomStore.getState().sprites['i1'].layerIndex).toBe(7)
+  })
+
+  it('reset restores default layer configs', () => {
+    useRoomStore.getState().updateLayerConfig(5, { visible: false })
+    useRoomStore.getState().reset()
+    expect(useRoomStore.getState().layers[5].visible).toBe(true)
   })
 })
