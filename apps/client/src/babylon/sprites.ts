@@ -217,6 +217,7 @@ export class SpriteManager {
       const sm = shadow.material as StandardMaterial
       const oldShadowTex = sm.diffuseTexture
       sm.diffuseTexture = new Texture(url, this.scene, false, true)
+      sm.diffuseTexture.hasAlpha = true
       oldShadowTex?.dispose()
     }
   }
