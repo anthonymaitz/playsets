@@ -3,7 +3,7 @@ import type { SpriteManifestEntry, TileManifestEntry, TileCategory, WeatherType,
 import { SpritePicker } from './SpritePicker'
 import { PropPicker } from './PropPicker'
 
-type SidebarTab = 'tokens' | 'build' | 'props'
+type SidebarTab = 'tokens' | 'build' | 'props' | 'roof'
 
 interface BuildPanelProps {
   wallTileId: string
@@ -27,6 +27,7 @@ interface Props {
   activeBackground: BackgroundType
   onBackgroundChange: (b: BackgroundType) => void
   onBuildingModeChange: (active: boolean) => void
+  onRoofModeChange: (active: boolean) => void
   buildPanel: BuildPanelProps
   selectedPropId: string | null
   onPropSelect: (entry: PropManifestEntry) => void
@@ -43,6 +44,7 @@ export function Sidebar({
   activeBackground,
   onBackgroundChange,
   onBuildingModeChange,
+  onRoofModeChange,
   buildPanel,
   selectedPropId,
   onPropSelect,
@@ -51,16 +53,10 @@ export function Sidebar({
   const [activeTab, setActiveTab] = useState<SidebarTab>('tokens')
 
   const handleTabClick = (tab: SidebarTab) => {
-    if (tab === 'tokens') {
-      setActiveTab('tokens')
-      onBuildingModeChange(false)
-    } else if (tab === 'build') {
-      setActiveTab('build')
-      onBuildingModeChange(true)
-    } else {
-      setActiveTab('props')
-      onBuildingModeChange(false)
-    }
+    if (tab === activeTab) return
+    onBuildingModeChange(tab === 'build')
+    onRoofModeChange(tab === 'roof')
+    setActiveTab(tab)
   }
 
   return (
@@ -76,6 +72,9 @@ export function Sidebar({
         )}
         {isHost && (
           <TabButton icon="🚪" label="Props" active={activeTab === 'props'} onClick={() => handleTabClick('props')} />
+        )}
+        {isHost && (
+          <TabButton icon="🏠" label="Roof" active={activeTab === 'roof'} onClick={() => handleTabClick('roof')} />
         )}
       </div>
 
@@ -104,6 +103,17 @@ export function Sidebar({
             onSelect={onPropSelect}
             onDeselect={onPropDeselect}
           />
+        )}
+        {activeTab === 'roof' && isHost && (
+          <div style={{ padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Roof Builder</span>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', margin: 0, lineHeight: 1.5 }}>
+              Click any building tile to add a roof covering its connected structure.
+            </p>
+            <p style={{ fontSize: 10, color: 'rgba(140,100,220,0.7)', margin: 0, lineHeight: 1.5 }}>
+              Tap the purple marker to change tile or toggle visibility.
+            </p>
+          </div>
         )}
       </div>
     </div>

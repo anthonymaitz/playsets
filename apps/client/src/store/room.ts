@@ -25,6 +25,7 @@ interface RoomStore {
   removeProp: (instanceId: string) => void
   setPropState: (instanceId: string, state: Record<string, string | number | boolean>) => void
   loadPropSnapshot: (props: BuilderProp[]) => void
+  setPropZOrder: (instanceId: string, zOrder: number) => void
   moveProp: (instanceId: string, col: number, row: number) => void
   placeRoof: (r: Roof) => void
   removeRoof: (instanceId: string) => void
@@ -115,6 +116,16 @@ export const useRoomStore = create<RoomStore>((set) => ({
     }),
   loadPropSnapshot: (props) =>
     set({ builderProps: Object.fromEntries(props.map((p) => [p.instanceId, p])) }),
+  setPropZOrder: (instanceId, zOrder) =>
+    set((store) => {
+      if (!store.builderProps[instanceId]) return store
+      return {
+        builderProps: {
+          ...store.builderProps,
+          [instanceId]: { ...store.builderProps[instanceId], zOrder },
+        },
+      }
+    }),
   moveProp: (instanceId, col, row) =>
     set((store) => {
       if (!store.builderProps[instanceId]) return store

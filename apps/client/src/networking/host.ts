@@ -184,6 +184,11 @@ export class HostSession {
         this.propManager.move(msg.instanceId, msg.col, msg.row, this.buildingManager)
         break
       }
+      case 'prop:zorder': {
+        useRoomStore.getState().setPropZOrder(msg.instanceId, msg.zOrder)
+        this.propManager.setPropZOrder(msg.instanceId, msg.zOrder)
+        break
+      }
       case 'prop:snapshot': {
         // Host never receives a snapshot — ignore defensively
         break

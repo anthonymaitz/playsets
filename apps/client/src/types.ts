@@ -62,6 +62,7 @@ export interface BuilderProp {
   col: number
   row: number
   state: Record<string, string | number | boolean>
+  zOrder?: number
 }
 
 export type PropCategory = 'punch-through' | 'wall-decor' | 'floor-decor' | 'floor-object'
@@ -116,6 +117,7 @@ export type GameMessage =
   | { type: 'prop:interact'; instanceId: string; state: Record<string, string | number | boolean> }
   | { type: 'prop:snapshot'; props: BuilderProp[] }
   | { type: 'prop:move'; instanceId: string; col: number; row: number }
+  | { type: 'prop:zorder'; instanceId: string; zOrder: number }
   | { type: 'roof:place'; roof: Roof }
   | { type: 'roof:remove'; instanceId: string }
   | { type: 'roof:visible'; instanceId: string; visible: boolean }

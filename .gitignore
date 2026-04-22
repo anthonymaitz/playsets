@@ -11,3 +11,4 @@ vite.config.ts.timestamp-*
 apps/client/public/assets/sprites/**/*.png
 apps/client/public/assets/sprites/**/*.webp
 .superpowers/
+node-compile-cache/
