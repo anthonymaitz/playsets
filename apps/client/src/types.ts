@@ -15,6 +15,7 @@ export interface SpriteInstance {
   animation?: AnimationName
   hidden?: boolean
   zOrder?: number
+  definitionId?: string   // present when sprite is a custom token
 }
 
 export interface Player {
@@ -94,9 +95,28 @@ export interface Roof {
   createdBy: string
 }
 
+export type SlotKey = 'face' | 'ears' | 'hair' | 'hats' | 'armor' | 'mainHand' | 'offHand'
+
+export interface SlotColors {
+  primary?: string
+  secondary?: string
+  tertiary?: string
+}
+
+export interface TokenLayerRef {
+  assetId: string
+  colors: SlotColors
+}
+
+export interface TokenDefinition {
+  definitionId: string
+  ownedBy: string
+  layers: Partial<Record<SlotKey, TokenLayerRef>>
+}
+
 export type GameMessage =
   | { type: 'state:snapshot'; sprites: SpriteInstance[]; players: Player[] }
-  | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string; zOrder?: number }
+  | { type: 'sprite:place'; spriteId: string; col: number; row: number; instanceId: string; placedBy: string; zOrder?: number; definitionId?: string }
   | { type: 'sprite:move'; instanceId: string; col: number; row: number }
   | { type: 'sprite:remove'; instanceId: string }
   | { type: 'sprite:emote'; instanceId: string; emote: string }
@@ -124,3 +144,5 @@ export type GameMessage =
   | { type: 'roof:tile'; instanceId: string; tileId: string }
   | { type: 'roof:snapshot'; roofs: Roof[] }
   | { type: 'sprite:zorder'; instanceId: string; zOrder: number }
+  | { type: 'token:define'; definition: TokenDefinition }
+  | { type: 'token:snapshot'; definitions: TokenDefinition[] }
