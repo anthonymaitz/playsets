@@ -717,8 +717,10 @@ export function RoomPage() {
     const zOrder = Object.values(sprites).filter((s) => s.col === col && s.row === row).length
     const instance = { instanceId, spriteId: 'custom', col, row, placedBy: localPlayer.playerId, zOrder, definitionId }
     const url = compositeToDataUrl(definition)
+    const backUrl = compositeToDataUrl(definition, false)
     useRoomStore.getState().placeSprite(instance)
     spriteManagerRef.current?.place(instance, url)
+    spriteManagerRef.current?.setTokenDataUrls(instanceId, url, backUrl)
     useTokenStore.getState().addOrUpdate(definition)
     // Do NOT broadcast yet — wait until Save
     builderIsNewTokenRef.current = true
@@ -729,7 +731,9 @@ export function RoomPage() {
     setBuilderDefinition(newDef)
     if (!builderInstanceId) return
     const url = compositeToDataUrl(newDef)
+    const backUrl = compositeToDataUrl(newDef, false)
     spriteManagerRef.current?.updateTexture(builderInstanceId, url)
+    spriteManagerRef.current?.setTokenDataUrls(builderInstanceId, url, backUrl)
   }
 
   const handleBuilderSave = () => {
@@ -762,7 +766,9 @@ export function RoomPage() {
       useTokenStore.getState().remove(builderDefinition?.definitionId ?? '')
     } else if (builderOriginalDef && builderInstanceId) {
       const url = compositeToDataUrl(builderOriginalDef)
+      const backUrl = compositeToDataUrl(builderOriginalDef, false)
       spriteManagerRef.current?.updateTexture(builderInstanceId, url)
+      spriteManagerRef.current?.setTokenDataUrls(builderInstanceId, url, backUrl)
     }
     builderIsNewTokenRef.current = false
     setBuilderOpen(false)

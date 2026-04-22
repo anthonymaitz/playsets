@@ -105,10 +105,10 @@ export class HostSession {
           zOrder: msg.zOrder, definitionId: msg.definitionId,
         }
         roomStore.placeSprite(instance)
-        const url = msg.definitionId
-          ? compositeToDataUrl(useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} })
-          : `/assets/sprites/${msg.spriteId}.svg`
+        const defH = msg.definitionId ? (useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} }) : null
+        const url = defH ? compositeToDataUrl(defH) : `/assets/sprites/${msg.spriteId}.svg`
         this.spriteManager.place(instance, url)
+        if (defH) this.spriteManager.setTokenDataUrls(msg.instanceId, url, compositeToDataUrl(defH, false))
         break
       }
       case 'sprite:move': {

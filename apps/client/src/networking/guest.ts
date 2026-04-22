@@ -79,10 +79,10 @@ export class GuestSession {
         playersStore.loadPlayers(msg.players)
         this.spriteManager.clear()
         for (const s of msg.sprites) {
-          const url = s.definitionId
-            ? compositeToDataUrl(useTokenStore.getState().definitions[s.definitionId] ?? { definitionId: s.definitionId, ownedBy: s.placedBy, layers: {} })
-            : `/assets/sprites/${s.spriteId}.svg`
+          const def = s.definitionId ? (useTokenStore.getState().definitions[s.definitionId] ?? { definitionId: s.definitionId, ownedBy: s.placedBy, layers: {} }) : null
+          const url = def ? compositeToDataUrl(def) : `/assets/sprites/${s.spriteId}.svg`
           this.spriteManager.place(s, url)
+          if (def) this.spriteManager.setTokenDataUrls(s.instanceId, url, compositeToDataUrl(def, false))
           if (s.animation) this.spriteManager.setAnimation(s.instanceId, s.animation)
           if (s.hidden) this.spriteManager.setHidden(s.instanceId, true)
           if (s.statuses?.length) this.spriteManager.setStatuses(s.instanceId, s.statuses)
@@ -96,10 +96,10 @@ export class GuestSession {
           zOrder: msg.zOrder, definitionId: msg.definitionId,
         }
         roomStore.placeSprite(instance)
-        const url = msg.definitionId
-          ? compositeToDataUrl(useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} })
-          : `/assets/sprites/${msg.spriteId}.svg`
+        const def2 = msg.definitionId ? (useTokenStore.getState().definitions[msg.definitionId] ?? { definitionId: msg.definitionId, ownedBy: msg.placedBy, layers: {} }) : null
+        const url = def2 ? compositeToDataUrl(def2) : `/assets/sprites/${msg.spriteId}.svg`
         this.spriteManager.place(instance, url)
+        if (def2) this.spriteManager.setTokenDataUrls(msg.instanceId, url, compositeToDataUrl(def2, false))
         break
       }
       case 'sprite:move': {
@@ -241,6 +241,7 @@ export class GuestSession {
           if (s.definitionId === msg.definition.definitionId) {
             const url = compositeToDataUrl(msg.definition)
             this.spriteManager.updateTexture(s.instanceId, url)
+            this.spriteManager.setTokenDataUrls(s.instanceId, url, compositeToDataUrl(msg.definition, false))
           }
         }
         break
@@ -253,6 +254,7 @@ export class GuestSession {
             if (s.definitionId === def.definitionId) {
               const url = compositeToDataUrl(def)
               this.spriteManager.updateTexture(s.instanceId, url)
+              this.spriteManager.setTokenDataUrls(s.instanceId, url, compositeToDataUrl(def, false))
             }
           }
         }
