@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type React from 'react'
 import { SLOT_DEFS, COLOR_PRESETS } from '../babylon/tokenManifest'
-import { compositeToken } from '../babylon/tokenCompositor'
+import { compositeToDataUrl } from '../babylon/tokenCompositor'
 import type { TokenDefinition, SlotKey, TokenLayerRef } from '../types'
 
 interface Props {
@@ -16,25 +16,14 @@ const BTN: React.CSSProperties = {
   fontSize: 13, fontWeight: 700,
 }
 
+const CHANNELS = ['primary', 'secondary', 'tertiary'] as const
+
 function Thumbnail({ def, slot, assetId }: { def: TokenDefinition; slot: SlotKey; assetId: string }) {
   const previewDef: TokenDefinition = {
     ...def,
     layers: { ...def.layers, [slot]: { assetId, colors: def.layers[slot]?.colors ?? {} } },
   }
-  const canvas = compositeToken(previewDef)
-  return (
-    <canvas
-      width={64}
-      height={96}
-      style={{ width: 64, height: 96, display: 'block' }}
-      ref={(el) => {
-        if (!el) return
-        const ctx = el.getContext('2d')!
-        ctx.clearRect(0, 0, 64, 96)
-        ctx.drawImage(canvas, 0, 0, 64, 96)
-      }}
-    />
-  )
+  return <img src={compositeToDataUrl(previewDef)} width={64} height={96} style={{ display: 'block' }} alt="" />
 }
 
 export function TokenBuilder({ definition, onChange, onSave, onCancel }: Props) {
@@ -54,8 +43,6 @@ export function TokenBuilder({ definition, onChange, onSave, onCancel }: Props) 
     const updated: TokenLayerRef = { ...existing, colors: { ...existing.colors, [channel]: color } }
     onChange({ ...definition, layers: { ...definition.layers, [activeSlot]: updated } })
   }
-
-  const CHANNELS = ['primary', 'secondary', 'tertiary'] as const
 
   return (
     <div style={{
