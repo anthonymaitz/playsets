@@ -1,7 +1,11 @@
 {
-  "name": "client",
+  "name": "playsets-board",
   "private": true,
+  "exports": {
+    ".": "./dist/playsets-board.mjs"
+  },
   "scripts": {
+    "build:lib": "vite build --config vite.lib.config.ts",
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run"
