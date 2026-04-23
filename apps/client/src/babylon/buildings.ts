@@ -3,9 +3,10 @@ import { cellToWorld, CELL_SIZE } from './grid'
 import { generateRoomTiles, normalizeRect } from './buildingUtils'
 import type { BuildingTile } from '../types'
 import { nanoid } from 'nanoid'
-import { LAYER_HEIGHT } from './layers'
 
 const TILE_Y = 0.01
+
+type WallOrientation = 'EW' | 'NS' | 'cross'
 
 export class BuildingManager {
   private meshes = new Map<string, Mesh>()
@@ -13,6 +14,7 @@ export class BuildingManager {
   private previewMeshes: Mesh[] = []
   private previewStartCell: { col: number; row: number } | null = null
   private wallPosTileId = new Map<string, string>()
+  private wallTiles = new Map<string, BuildingTile>()
 
   constructor(private scene: Scene) {}
 
@@ -40,20 +42,45 @@ export class BuildingManager {
     return dt
   }
 
-  private createTilePlane(id: string, col: number, row: number, path: string, layerIndex = 5, alpha = 1): Mesh {
+  // EW = plane runs along X axis, faces ±Z (top/bottom room walls)
+  // NS = plane runs along Z axis, faces ±X (left/right room walls)
+  // cross = both planes merged (corners, isolated tiles)
+  private getWallOrientation(col: number, row: number, layerIndex: number, wallPositions?: Set<string>): WallOrientation {
+    const has = (c: number, r: number) => wallPositions
+      ? wallPositions.has(`${c},${r}`)
+      : this.wallPosTileId.has(`${c},${r},${layerIndex}`)
+    const hasEW = has(col + 1, row) || has(col - 1, row)
+    const hasNS = has(col, row + 1) || has(col, row - 1)
+    if (hasEW && hasNS) return 'cross'
+    if (hasEW) return 'EW'
+    if (hasNS) return 'NS'
+    return 'cross'
+  }
+
+  private createTilePlane(id: string, col: number, row: number, path: string, layerIndex = 5, alpha = 1, wallOrientation: WallOrientation = 'cross'): Mesh {
     const isWall = path.includes('wall')
     const pos = cellToWorld(col, row)
     let mesh: Mesh
-    const layerY = (layerIndex - 5) * LAYER_HEIGHT
     if (isWall) {
-      mesh = MeshBuilder.CreateBox(`btile-${id}`, { width: CELL_SIZE, height: 1.6, depth: CELL_SIZE }, this.scene)
-      mesh.position.set(pos.x, layerY + 0.8, pos.z)
+      if (wallOrientation === 'cross') {
+        const planeA = MeshBuilder.CreatePlane(`_wa-${id}`, { width: CELL_SIZE, height: 1.6 }, this.scene)
+        const planeB = MeshBuilder.CreatePlane(`_wb-${id}`, { width: CELL_SIZE, height: 1.6 }, this.scene)
+        planeB.rotation.y = Math.PI / 2
+        planeB.bakeCurrentTransformIntoVertices()
+        mesh = Mesh.MergeMeshes([planeA, planeB], true, false)!
+        mesh.name = `btile-${id}`
+      } else {
+        mesh = MeshBuilder.CreatePlane(`btile-${id}`, { width: CELL_SIZE, height: 1.6 }, this.scene)
+        if (wallOrientation === 'NS') mesh.rotation.y = Math.PI / 2
+        mesh.bakeCurrentTransformIntoVertices()
+      }
+      mesh.position.set(pos.x, 0.8, pos.z)
     } else {
       mesh = MeshBuilder.CreatePlane(`btile-${id}`, { size: CELL_SIZE }, this.scene)
       mesh.rotation.x = Math.PI / 2
-      mesh.position.set(pos.x, layerY + TILE_Y, pos.z)
+      mesh.position.set(pos.x, TILE_Y, pos.z)
     }
-    mesh.renderingGroupId = isWall ? 1 : 0
+    mesh.renderingGroupId = layerIndex
     const mat = new StandardMaterial(`bmat-${id}`, this.scene)
     const tex = this.getOrLoadTexture(path)
     mat.diffuseTexture = tex
@@ -62,16 +89,20 @@ export class BuildingManager {
     mat.alpha = alpha
     mat.backFaceCulling = false
     mesh.material = mat
-    mesh.metadata = { layerIndex }
+    mesh.metadata = { layerIndex, wallOrientation: isWall ? wallOrientation : undefined }
     return mesh
   }
 
   placeTile(tile: BuildingTile, path: string): void {
     if (this.meshes.has(tile.instanceId)) return
-    if (tile.tileId.includes('wall')) {
-      this.wallPosTileId.set(`${tile.col},${tile.row}`, tile.instanceId)
+    const layer = tile.layerIndex ?? 5
+    const isWall = tile.tileId.includes('wall')
+    if (isWall) {
+      this.wallPosTileId.set(`${tile.col},${tile.row},${layer}`, tile.instanceId)
+      this.wallTiles.set(tile.instanceId, tile)
     }
-    this.meshes.set(tile.instanceId, this.createTilePlane(tile.instanceId, tile.col, tile.row, path, tile.layerIndex ?? 5))
+    const orientation = isWall ? this.getWallOrientation(tile.col, tile.row, layer) : undefined
+    this.meshes.set(tile.instanceId, this.createTilePlane(tile.instanceId, tile.col, tile.row, path, layer, 1, orientation))
   }
 
   removeTile(instanceId: string): void {
@@ -80,33 +111,35 @@ export class BuildingManager {
     for (const [posKey, id] of this.wallPosTileId) {
       if (id === instanceId) { this.wallPosTileId.delete(posKey); break }
     }
+    this.wallTiles.delete(instanceId)
     const mat = mesh.material
     mesh.dispose()
     mat?.dispose()
     this.meshes.delete(instanceId)
   }
 
-  hideWallAt(col: number, row: number): void {
-    const id = this.wallPosTileId.get(`${col},${row}`)
+  hideWallAt(col: number, row: number, layerIndex = 5): void {
+    const id = this.wallPosTileId.get(`${col},${row},${layerIndex}`)
     if (!id) return
     const mesh = this.meshes.get(id)
     if (mesh) mesh.isVisible = false
   }
 
-  showWallAt(col: number, row: number): void {
-    const id = this.wallPosTileId.get(`${col},${row}`)
+  showWallAt(col: number, row: number, layerIndex = 5): void {
+    const id = this.wallPosTileId.get(`${col},${row},${layerIndex}`)
     if (!id) return
     const mesh = this.meshes.get(id)
     if (mesh) mesh.isVisible = true
   }
 
-  isWallAt(col: number, row: number): boolean {
-    return this.wallPosTileId.has(`${col},${row}`)
+  isWallAt(col: number, row: number, layerIndex = 5): boolean {
+    return this.wallPosTileId.has(`${col},${row},${layerIndex}`)
   }
 
   loadSnapshot(tiles: BuildingTile[]): void {
     this.clearTiles()
     for (const tile of tiles) this.placeTile(tile, this.tilePath(tile.tileId))
+    this.reorientAllWalls()
   }
 
   private tilePath(tileId: string): string {
@@ -121,6 +154,25 @@ export class BuildingManager {
     }
     this.meshes.clear()
     this.wallPosTileId.clear()
+    this.wallTiles.clear()
+  }
+
+  // Correct wall mesh orientation after all tiles are in the map.
+  // Called after commitPreview and loadSnapshot so every wall knows its neighbors.
+  reorientAllWalls(targetLayer?: number): void {
+    for (const [instanceId, tile] of this.wallTiles) {
+      const layer = tile.layerIndex ?? 5
+      if (targetLayer !== undefined && layer !== targetLayer) continue
+      const correctOrientation = this.getWallOrientation(tile.col, tile.row, layer)
+      const mesh = this.meshes.get(instanceId)
+      if (!mesh) continue
+      if ((mesh.metadata?.wallOrientation as WallOrientation) === correctOrientation) continue
+      const mat = mesh.material
+      mesh.dispose()
+      mat?.dispose()
+      const newMesh = this.createTilePlane(instanceId, tile.col, tile.row, this.tilePath(tile.tileId), layer, 1, correctOrientation)
+      this.meshes.set(instanceId, newMesh)
+    }
   }
 
   beginPreview(col: number, row: number): void {
@@ -146,10 +198,21 @@ export class BuildingManager {
       endCol,
       endRow,
     })
+
+    const wallPositions = new Set<string>()
     for (let col = minCol; col <= maxCol; col++) {
       for (let row = minRow; row <= maxRow; row++) {
         const isPerimeter = col === minCol || col === maxCol || row === minRow || row === maxRow
-        const mesh = this.createTilePlane(`preview-${col}-${row}`, col, row, isPerimeter ? wallPath : floorPath, 0.45)
+        if (isPerimeter) wallPositions.add(`${col},${row}`)
+      }
+    }
+
+    for (let col = minCol; col <= maxCol; col++) {
+      for (let row = minRow; row <= maxRow; row++) {
+        const isPerimeter = col === minCol || col === maxCol || row === minRow || row === maxRow
+        const path = isPerimeter ? wallPath : floorPath
+        const orientation = isPerimeter ? this.getWallOrientation(col, row, 10, wallPositions) : undefined
+        const mesh = this.createTilePlane(`preview-${col}-${row}`, col, row, path, 10, 0.45, orientation)
         this.previewMeshes.push(mesh)
       }
     }
@@ -193,6 +256,7 @@ export class BuildingManager {
     floorTileId: string,
     existingTiles: Record<string, BuildingTile>,
     mergeMode: 'open' | 'walled',
+    layerIndex = 5,
   ): { tiles: BuildingTile[], removedIds: string[] } {
     if (!this.previewStartCell) return { tiles: [], removedIds: [] }
     this.clearPreview()
@@ -208,7 +272,6 @@ export class BuildingManager {
     let effectiveTiles = existingTiles
 
     if (mergeMode === 'open') {
-      // Clear Room 2's entire footprint — normalization pass below fixes all type issues
       const filtered: Record<string, BuildingTile> = {}
       for (const [id, tile] of Object.entries(existingTiles)) {
         if (tile.col >= minCol && tile.col <= maxCol && tile.row >= minRow && tile.row <= maxRow) {
@@ -228,11 +291,14 @@ export class BuildingManager {
       effectiveTiles,
       mergeMode,
     )
-    const newTiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), ...def }))
+    const newTiles: BuildingTile[] = tileDefs.map((def) => ({ instanceId: nanoid(), layerIndex, ...def }))
     for (const tile of newTiles) this.placeTile(tile, this.tilePath(tile.tileId))
     this.previewStartCell = null
 
-    if (mergeMode !== 'open') return { tiles: newTiles, removedIds }
+    if (mergeMode !== 'open') {
+      this.reorientAllWalls(layerIndex)
+      return { tiles: newTiles, removedIds }
+    }
 
     // Build position-keyed view of all tiles after placement
     const allAfter: Record<string, BuildingTile> = { ...effectiveTiles }
@@ -256,8 +322,6 @@ export class BuildingManager {
     }
 
     // Pass 2: inner corner — a floor tile diagonal to two perpendicular walls
-    // (whose shared diagonal is not a wall) closes a concave perimeter gap.
-    // Walls sit on painted floor tiles only; no new cells are added outside the room.
     const diags: [number, number][] = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
     for (const [, entry] of posMap) {
       if (entry.correctType !== 'floor') continue
@@ -284,12 +348,13 @@ export class BuildingManager {
       }
       const correctTileId = entry.correctType === 'wall' ? wallTileId : floorTileId
       this.removeTile(entry.tile.instanceId)
-      const fixed: BuildingTile = { instanceId: nanoid(), tileId: correctTileId, col: entry.tile.col, row: entry.tile.row }
+      const fixed: BuildingTile = { instanceId: nanoid(), tileId: correctTileId, col: entry.tile.col, row: entry.tile.row, layerIndex }
       this.placeTile(fixed, this.tilePath(correctTileId))
       finalTiles.push(fixed)
       if (entry.inExisting) removedIds.push(entry.tile.instanceId)
     }
 
+    this.reorientAllWalls(layerIndex)
     return { tiles: finalTiles, removedIds }
   }
 
@@ -311,6 +376,7 @@ export class BuildingManager {
     for (const mesh of this.meshes.values()) {
       if ((mesh.metadata?.layerIndex as number ?? 5) === layerIndex) {
         mesh.isVisible = visible
+        mesh.isPickable = visible
       }
     }
   }
