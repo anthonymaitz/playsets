@@ -140,21 +140,22 @@ export class SpriteManager {
     this.meshes.set(instance.instanceId, plane)
     if (this.shadowGen) this.shadowGen.addShadowCaster(plane)
 
-    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath)
+    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath, instance.layerIndex ?? 5)
 
     if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
 
     if (instance.hidden) this.setHidden(instance.instanceId, true)
   }
 
-  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string, layerY = 0): void {
+  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string, layerIndex = 5): void {
     const sp = MeshBuilder.CreatePlane(`shadow-${instanceId}`, {
       width: CELL_SIZE * 0.9,
       height: SHADOW_LENGTH,
     }, this.scene)
     sp.rotation.x = SHADOW_ROT_X
     sp.rotation.y = SHADOW_ROT_Y
-    sp.position = new Vector3(x + SHADOW_OFFSET_X, layerY + 0.01, z + SHADOW_OFFSET_Z)
+    sp.position = new Vector3(x + SHADOW_OFFSET_X, 0.01, z + SHADOW_OFFSET_Z)
+    sp.renderingGroupId = layerIndex
     const sm = new StandardMaterial(`shadow-mat-${instanceId}`, this.scene)
     sm.diffuseTexture = this.getTexture(spritePath)
     sm.useAlphaFromDiffuseTexture = true

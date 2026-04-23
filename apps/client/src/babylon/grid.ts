@@ -43,7 +43,7 @@ export function createGrid(scene: Scene): Mesh {
   mat.useAlphaFromDiffuseTexture = true
   mat.specularColor = Color3.Black()
   ground.material = mat
-  ground.renderingGroupId = 10
+  ground.renderingGroupId = 5
 
   return ground
 }
