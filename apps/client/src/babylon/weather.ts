@@ -153,7 +153,7 @@ export class WeatherSystem {
     mesh.position.y = 0.06
     mesh.material = mat
     mesh.isPickable = false
-    mesh.renderingGroupId = 2
+    mesh.renderingGroupId = 10
 
     // Tile size in world units: mesh width (240) / uScale (4) = 60
     const TILE = 240 / 4
@@ -219,7 +219,7 @@ export class WeatherSystem {
 
     const rain = new ParticleSystem('rain', 3000, this.scene)
     rain.particleTexture = rainTex
-    rain.renderingGroupId = 1
+    rain.renderingGroupId = 10
 
     const emitPos = new Vector3(this.camera.target.x, 26, this.camera.target.z)
     rain.emitter = emitPos

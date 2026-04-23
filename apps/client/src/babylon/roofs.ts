@@ -35,7 +35,7 @@ export class RoofManager {
         this.scene,
       )
       mesh.position.set(x, 1.70, z)
-      mesh.renderingGroupId = 1
+      mesh.renderingGroupId = 10
       mesh.isVisible = roof.visible
       const mat = new StandardMaterial(`roof-cell-mat-${roof.instanceId}-${col}-${row}`, this.scene)
       mat.diffuseColor = color
@@ -49,7 +49,7 @@ export class RoofManager {
       const { x, z } = cellToWorld(roof.tokenCol, roof.tokenRow)
       token = MeshBuilder.CreateBox(`roof-token-${roof.instanceId}`, { size: 0.28 }, this.scene)
       token.position.set(x, 1.95, z)
-      token.renderingGroupId = 2
+      token.renderingGroupId = 10
       token.metadata = { roofInstanceId: roof.instanceId }
       const mat = new StandardMaterial(`roof-token-mat-${roof.instanceId}`, this.scene)
       mat.diffuseColor = TOKEN_COLOR

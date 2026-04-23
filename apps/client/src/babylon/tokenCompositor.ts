@@ -1,14 +1,19 @@
 import { CANVAS_W, CANVAS_H, SLOT_DEFS, COMPOSITOR_ORDER, DEFAULT_SKIN, drawBodyBlank } from './tokenManifest'
 import type { TokenDefinition, SlotKey, SlotColors } from '../types'
 
-function getAssetDraw(slotKey: SlotKey, assetId: string): ((ctx: CanvasRenderingContext2D, colors: SlotColors) => void) | null {
+function getAssetDrawFn(
+  slotKey: SlotKey,
+  assetId: string,
+  isFront: boolean,
+): ((ctx: CanvasRenderingContext2D, colors: SlotColors) => void) | null {
   const slotDef = SLOT_DEFS.find((s) => s.key === slotKey)
   if (!slotDef) return null
   const asset = slotDef.assets.find((a) => a.id === assetId)
-  return asset?.draw ?? null
+  if (!asset) return null
+  return isFront ? asset.draw : (asset.drawBack ?? asset.draw)
 }
 
-export function compositeToken(definition: TokenDefinition): HTMLCanvasElement {
+export function compositeToken(definition: TokenDefinition, isFront = true): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
   canvas.height = CANVAS_H
@@ -26,13 +31,13 @@ export function compositeToken(definition: TokenDefinition): HTMLCanvasElement {
       ? { primary: skinTone }
       : layer.colors
 
-    const draw = getAssetDraw(slot, layer.assetId)
+    const draw = getAssetDrawFn(slot, layer.assetId, isFront)
     if (draw) draw(ctx, colors)
   }
 
   return canvas
 }
 
-export function compositeToDataUrl(definition: TokenDefinition): string {
-  return compositeToken(definition).toDataURL('image/png')
+export function compositeToDataUrl(definition: TokenDefinition, isFront = true): string {
+  return compositeToken(definition, isFront).toDataURL('image/png')
 }

@@ -2,7 +2,6 @@ import { Scene, MeshBuilder, StandardMaterial, Color3, Mesh, TransformNode } fro
 import type { BuilderProp, PropCategory } from '../types'
 import type { BuildingManager } from './buildings'
 import { cellToWorld } from './grid'
-import { LAYER_HEIGHT } from './layers'
 
 // ── Shared colors ────────────────────────────────────────────────────────────
 const FRAME_COLOR   = new Color3(0.42, 0.26, 0.13)   // wood frame
@@ -52,9 +51,8 @@ export class PropManager {
     if (this.entries.has(prop.instanceId)) return
     const { x, z } = cellToWorld(prop.col, prop.row)
 
-    const layerY = ((prop.layerIndex ?? 5) - 5) * LAYER_HEIGHT
     const root = new TransformNode(`prop-root-${prop.instanceId}`, this.scene)
-    root.position.set(x, layerY - (prop.zOrder ?? 0) * 0.03, z)
+    root.position.set(x, -(prop.zOrder ?? 0) * 0.03, z)
     root.metadata = { layerIndex: prop.layerIndex ?? 5 }
     // z-axis wall: west wall uses -90°, east wall uses +90°
     if (prop.state.facing === 'west') root.rotation.y = -Math.PI / 2
@@ -71,7 +69,7 @@ export class PropManager {
     switch (prop.propId) {
       case 'door-wood':
         ;({ allMeshes, panel } = this.placeDoor(prop))
-        buildingManager.hideWallAt(prop.col, prop.row)
+        buildingManager.hideWallAt(prop.col, prop.row, prop.layerIndex ?? 5)
         break
       case 'window-wood':
         ;({ allMeshes, panel } = this.placeWindow(prop))
@@ -120,6 +118,7 @@ export class PropManager {
     for (const m of allMeshes) {
       m.parent = root
       m.metadata = { propInstanceId: prop.instanceId }
+      m.renderingGroupId = prop.layerIndex ?? 5
     }
 
     this.entries.set(prop.instanceId, { prop, category, root, allMeshes, panel })
@@ -129,7 +128,7 @@ export class PropManager {
     const entry = this.entries.get(instanceId)
     if (!entry) return
     if (entry.category === 'punch-through') {
-      buildingManager.showWallAt(entry.prop.col, entry.prop.row)
+      buildingManager.showWallAt(entry.prop.col, entry.prop.row, entry.prop.layerIndex ?? 5)
     }
     for (const m of entry.allMeshes) { m.material?.dispose(); m.dispose() }
     entry.root.dispose()
@@ -166,9 +165,10 @@ export class PropManager {
     const entry = this.entries.get(instanceId)
     if (!entry) return
     const oldProp = entry.prop
-    if (entry.category === 'punch-through') buildingManager.showWallAt(oldProp.col, oldProp.row)
+    const layer = entry.prop.layerIndex ?? 5
+    if (entry.category === 'punch-through') buildingManager.showWallAt(oldProp.col, oldProp.row, layer)
     entry.prop = { ...entry.prop, col, row }
-    if (entry.category === 'punch-through') buildingManager.hideWallAt(col, row)
+    if (entry.category === 'punch-through') buildingManager.hideWallAt(col, row, layer)
     const { x, z } = cellToWorld(col, row)
     entry.root.position.x = x
     entry.root.position.z = z
@@ -199,7 +199,10 @@ export class PropManager {
   setLayerVisibility(layerIndex: number, visible: boolean): void {
     for (const entry of this.entries.values()) {
       if ((entry.root.metadata?.layerIndex as number ?? 5) === layerIndex) {
-        for (const mesh of entry.allMeshes) mesh.isVisible = visible
+        for (const mesh of entry.allMeshes) {
+          mesh.isVisible = visible
+          mesh.isPickable = visible
+        }
       }
     }
   }

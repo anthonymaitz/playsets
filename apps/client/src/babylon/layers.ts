@@ -16,7 +16,6 @@ function makeBackgroundTexture(scene: Scene, bg: Exclude<LayerBackground, 'trans
     ctx.lineWidth = 2
     ctx.strokeRect(1, 1, SIZE - 2, SIZE - 2)
   } else {
-    // dirt
     ctx.fillStyle = '#5a3a1a'
     ctx.fillRect(0, 0, SIZE, SIZE)
     ctx.fillStyle = '#4a2e12'
@@ -58,18 +57,14 @@ export class LayerBackgroundManager {
     this._sync()
   }
 
-  private layerY(layerIndex: number): number {
-    return (layerIndex - 5) * LAYER_HEIGHT - 0.01
-  }
-
   private _makePlane(layerIndex: number, bg: Exclude<LayerBackground, 'transparent'>): Mesh {
     const plane = MeshBuilder.CreateGround(
       `layer-bg-${layerIndex}`,
       { width: GROUND_SIZE, height: GROUND_SIZE },
       this.scene,
     )
-    plane.position.y = this.layerY(layerIndex)
-    plane.renderingGroupId = 0
+    plane.position.y = -0.01
+    plane.renderingGroupId = layerIndex
     const mat = new StandardMaterial(`layer-mat-${layerIndex}`, this.scene)
     const tex = makeBackgroundTexture(this.scene, bg, String(layerIndex))
     mat.diffuseTexture = tex
@@ -109,7 +104,7 @@ export class LayerBackgroundManager {
         { width: GROUND_SIZE, height: GROUND_SIZE },
         this.scene,
       )
-      plane.position.y = this.layerY(1) - LAYER_HEIGHT
+      plane.position.y = -0.01
       plane.renderingGroupId = 0
       const mat = new StandardMaterial('layer-fallback-mat', this.scene)
       const tex = makeStarfieldTexture(this.scene)

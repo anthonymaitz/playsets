@@ -25,6 +25,7 @@ export interface TokenAsset {
   id: string
   label: string
   draw: (ctx: CanvasRenderingContext2D, colors: SlotColors) => void
+  drawBack?: (ctx: CanvasRenderingContext2D, colors: SlotColors) => void
 }
 
 export interface SlotDef {
@@ -81,6 +82,7 @@ export const SLOT_DEFS: SlotDef[] = [
         id: 'face-none',
         label: 'Plain',
         draw: (_ctx, _colors) => {},
+        drawBack: (_ctx, _colors) => {},
       },
       {
         id: 'face-round',
@@ -93,6 +95,7 @@ export const SLOT_DEFS: SlotDef[] = [
           fill(ctx, 'rgba(255,255,255,0.5)', () => ellipse(ctx, 75, 43, 2, 2))
           fill(ctx, colors.primary ?? DEFAULT_SKIN, () => ellipse(ctx, 64, 54, 3, 2))
         },
+        drawBack: (_ctx, _colors) => {},
       },
       {
         id: 'face-stern',
@@ -106,6 +109,7 @@ export const SLOT_DEFS: SlotDef[] = [
           fill(ctx, eye, () => { ctx.roundRect(50, 44, 12, 4, 2) })
           fill(ctx, eye, () => { ctx.roundRect(66, 44, 12, 4, 2) })
         },
+        drawBack: (_ctx, _colors) => {},
       },
     ],
   },
@@ -158,6 +162,7 @@ export const SLOT_DEFS: SlotDef[] = [
         id: 'hair-none',
         label: 'Bald',
         draw: (_ctx, _colors) => {},
+        drawBack: (_ctx, _colors) => {},
       },
       {
         id: 'hair-short',
@@ -165,6 +170,11 @@ export const SLOT_DEFS: SlotDef[] = [
         draw: (ctx, colors) => {
           const c = colors.primary ?? DEFAULT_HAIR
           fill(ctx, c, () => { ctx.roundRect(42, 16, 44, 28, [14, 14, 0, 0]) })
+        },
+        drawBack: (ctx, colors) => {
+          const c = colors.primary ?? DEFAULT_HAIR
+          // Back of head cap — slightly fuller at the back
+          fill(ctx, c, () => { ctx.roundRect(40, 14, 48, 32, [14, 14, 4, 4]) })
         },
       },
       {
@@ -176,6 +186,14 @@ export const SLOT_DEFS: SlotDef[] = [
           fill(ctx, c, () => { ctx.roundRect(32, 30, 16, 52, 6) })
           fill(ctx, c, () => { ctx.roundRect(80, 30, 16, 52, 6) })
         },
+        drawBack: (ctx, colors) => {
+          const c = colors.primary ?? DEFAULT_HAIR
+          // Back of head + flowing curtain down the back
+          fill(ctx, c, () => { ctx.roundRect(40, 14, 48, 30, [14, 14, 4, 4]) })
+          fill(ctx, c, () => { ctx.roundRect(34, 30, 60, 70, [0, 0, 10, 10]) })
+          // Slight taper at the bottom
+          fill(ctx, c, () => { ctx.roundRect(40, 92, 48, 16, [0, 0, 10, 10]) })
+        },
       },
       {
         id: 'hair-messy',
@@ -185,6 +203,15 @@ export const SLOT_DEFS: SlotDef[] = [
           fill(ctx, c, () => ellipse(ctx, 52, 22, 14, 16))
           fill(ctx, c, () => ellipse(ctx, 68, 18, 12, 14))
           fill(ctx, c, () => ellipse(ctx, 64, 26, 18, 12))
+        },
+        drawBack: (ctx, colors) => {
+          const c = colors.primary ?? DEFAULT_HAIR
+          // Messy back — clumps sticking out at the back
+          fill(ctx, c, () => ellipse(ctx, 48, 24, 14, 16))
+          fill(ctx, c, () => ellipse(ctx, 72, 20, 12, 14))
+          fill(ctx, c, () => ellipse(ctx, 64, 28, 18, 14))
+          fill(ctx, c, () => ellipse(ctx, 56, 40, 8, 10))
+          fill(ctx, c, () => ellipse(ctx, 76, 38, 7, 9))
         },
       },
     ],
@@ -248,6 +275,7 @@ export const SLOT_DEFS: SlotDef[] = [
         id: 'armor-none',
         label: 'None',
         draw: (_ctx, _colors) => {},
+        drawBack: (_ctx, _colors) => {},
       },
       {
         id: 'armor-light',
@@ -257,6 +285,14 @@ export const SLOT_DEFS: SlotDef[] = [
           const s = colors.secondary ?? DEFAULT_ARMOR_S
           fill(ctx, p, () => { ctx.roundRect(42, 82, 44, 50, 4) })
           fill(ctx, s, () => ctx.rect(60, 82, 8, 50))
+          fill(ctx, s, () => { ctx.roundRect(28, 82, 18, 12, 4) })
+          fill(ctx, s, () => { ctx.roundRect(82, 82, 18, 12, 4) })
+        },
+        drawBack: (ctx, colors) => {
+          const p = colors.primary ?? DEFAULT_ARMOR_P
+          const s = colors.secondary ?? DEFAULT_ARMOR_S
+          // Back of tabard — plain, no center stripe
+          fill(ctx, p, () => { ctx.roundRect(42, 82, 44, 50, 4) })
           fill(ctx, s, () => { ctx.roundRect(28, 82, 18, 12, 4) })
           fill(ctx, s, () => { ctx.roundRect(82, 82, 18, 12, 4) })
         },
@@ -271,6 +307,17 @@ export const SLOT_DEFS: SlotDef[] = [
           fill(ctx, p, () => { ctx.roundRect(38, 80, 52, 56, 4) })
           fill(ctx, s, () => { ctx.roundRect(22, 80, 20, 18, 6) })
           fill(ctx, s, () => { ctx.roundRect(86, 80, 20, 18, 6) })
+          fill(ctx, t, () => ctx.rect(38, 130, 52, 6))
+        },
+        drawBack: (ctx, colors) => {
+          const p = colors.primary ?? DEFAULT_ARMOR_P
+          const s = colors.secondary ?? DEFAULT_ARMOR_S
+          const t = colors.tertiary ?? '#c8a415'
+          // Back plate — solid with spine line
+          fill(ctx, p, () => { ctx.roundRect(38, 80, 52, 56, 4) })
+          fill(ctx, s, () => { ctx.roundRect(22, 80, 20, 18, 6) })
+          fill(ctx, s, () => { ctx.roundRect(86, 80, 20, 18, 6) })
+          fill(ctx, s, () => ctx.rect(62, 80, 4, 56))
           fill(ctx, t, () => ctx.rect(38, 130, 52, 6))
         },
       },
@@ -288,6 +335,24 @@ export const SLOT_DEFS: SlotDef[] = [
           fill(ctx, p, () => { ctx.roundRect(92, 110, 16, 26, 4) })
           fill(ctx, t, () => ctx.rect(36, 128, 56, 4))
           fill(ctx, t, () => ctx.rect(36, 80, 56, 4))
+        },
+        drawBack: (ctx, colors) => {
+          const p = colors.primary ?? DEFAULT_ARMOR_P
+          const s = colors.secondary ?? DEFAULT_ARMOR_S
+          const t = colors.tertiary ?? '#c8a415'
+          // Full back plate with spine + horizontal ridges
+          fill(ctx, p, () => { ctx.roundRect(36, 78, 56, 60, 4) })
+          fill(ctx, s, () => { ctx.roundRect(18, 78, 24, 24, 6) })
+          fill(ctx, s, () => { ctx.roundRect(86, 78, 24, 24, 6) })
+          fill(ctx, p, () => { ctx.roundRect(20, 110, 16, 26, 4) })
+          fill(ctx, p, () => { ctx.roundRect(92, 110, 16, 26, 4) })
+          fill(ctx, t, () => ctx.rect(36, 128, 56, 4))
+          fill(ctx, t, () => ctx.rect(36, 80, 56, 4))
+          // Spine ridge
+          fill(ctx, s, () => ctx.rect(62, 80, 4, 48))
+          // Horizontal ridges
+          fill(ctx, t, () => ctx.rect(36, 100, 56, 3))
+          fill(ctx, t, () => ctx.rect(36, 116, 56, 3))
         },
       },
     ],

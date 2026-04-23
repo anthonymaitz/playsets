@@ -13,7 +13,6 @@ import {
 } from '@babylonjs/core'
 import { cellToWorld, CELL_SIZE } from './grid'
 import { getCameraSnapIndex, computeSpriteVariant } from './cameraFacing'
-import { LAYER_HEIGHT } from './layers'
 import type { SpriteInstance, FacingDir, AnimationName } from '../types'
 
 const SPRITE_HEIGHT = CELL_SIZE * 1.6
@@ -114,10 +113,9 @@ export class SpriteManager {
       { width: CELL_SIZE * 0.9, height: h },
       this.scene,
     )
-    const layerY = ((instance.layerIndex ?? 5) - 5) * LAYER_HEIGHT
-    plane.position = new Vector3(x, layerY + h / 2 - (instance.zOrder ?? 0) * 0.03, z)
+    plane.position = new Vector3(x, h / 2 - (instance.zOrder ?? 0) * 0.03, z)
     plane.billboardMode = Mesh.BILLBOARDMODE_Y
-    plane.renderingGroupId = 1
+    plane.renderingGroupId = instance.layerIndex ?? 5
     if (initialMirrored) plane.scaling.x = -1
 
     const mat = new StandardMaterial(`mat-${instance.instanceId}`, this.scene)
@@ -142,9 +140,9 @@ export class SpriteManager {
     this.meshes.set(instance.instanceId, plane)
     if (this.shadowGen) this.shadowGen.addShadowCaster(plane)
 
-    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath, layerY)
+    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath)
 
-    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing, layerY)
+    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
 
     if (instance.hidden) this.setHidden(instance.instanceId, true)
   }
@@ -202,29 +200,22 @@ export class SpriteManager {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
     const h = (mesh.metadata?.isTerrain as boolean) ? TERRAIN_HEIGHT : SPRITE_HEIGHT
-    const layerY = ((mesh.metadata?.layerIndex as number ?? 5) - 5) * LAYER_HEIGHT
     mesh.metadata.zOrder = zOrder
-    mesh.position.y = layerY + h / 2 - zOrder * 0.03
+    mesh.position.y = h / 2 - zOrder * 0.03
   }
 
   setLayer(instanceId: string, layerIndex: number): void {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
     mesh.metadata.layerIndex = layerIndex
-    const layerY = (layerIndex - 5) * LAYER_HEIGHT
-    const h: number = mesh.metadata.isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
-    const zOrder: number = mesh.metadata.zOrder ?? 0
-    mesh.position.y = layerY + h / 2 - zOrder * 0.03
-    const shadow = this.tokenShadows.get(instanceId)
-    if (shadow) shadow.position.y = layerY + 0.01
-    const ind = this.indicators.get(instanceId)
-    if (ind) ind.position.y = layerY + 0.02
+    mesh.renderingGroupId = layerIndex
   }
 
   setLayerVisibility(layerIndex: number, visible: boolean): void {
     for (const [instanceId, mesh] of this.meshes) {
       if ((mesh.metadata?.layerIndex as number ?? 5) !== layerIndex) continue
       mesh.isVisible = visible
+      mesh.isPickable = visible
       const shadow = this.tokenShadows.get(instanceId)
       if (shadow) shadow.isVisible = visible && this.shadowsEnabled
       const ind = this.indicators.get(instanceId)
@@ -299,8 +290,7 @@ export class SpriteManager {
       }
     }
     mesh.scaling.x = isMirrored ? -1 : 1
-    const layerY = ((mesh.metadata.layerIndex as number ?? 5) - 5) * LAYER_HEIGHT
-    this.upsertIndicator(instanceId, mesh.position.x, mesh.position.z, facing, layerY)
+    this.upsertIndicator(instanceId, mesh.position.x, mesh.position.z, facing)
   }
 
   move(instanceId: string, col: number, row: number): void {
@@ -444,7 +434,7 @@ export class SpriteManager {
       this.hidePlacementGhost()
       const mesh = MeshBuilder.CreatePlane('placement-ghost', { width: CELL_SIZE * 0.9, height: h }, this.scene)
       mesh.billboardMode = Mesh.BILLBOARDMODE_Y
-      mesh.renderingGroupId = 1
+      mesh.renderingGroupId = 10
       const mat = new StandardMaterial('placement-ghost-mat', this.scene)
       const tex = this.getTexture(path)
       tex.hasAlpha = true

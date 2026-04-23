@@ -10,7 +10,13 @@ import {
   Animation,
   QuarticEase,
   EasingFunction,
+  RenderingManager,
 } from '@babylonjs/core'
+
+// Groups 1-9 = layers 1-9 (each clears depth so higher layers always draw on top)
+// Group 10 = roofs + weather + previews (always on top)
+// Group 11 = builder anchor (renders after previews, always topmost)
+RenderingManager.MAX_RENDERINGGROUPS = 12
 
 export interface SceneContext {
   engine: Engine
@@ -24,6 +30,12 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true })
   const scene = new Scene(engine)
   scene.clearColor = new Color4(0.22, 0.24, 0.32, 1)
+
+  // Each layer group clears the depth buffer before rendering so higher layers
+  // always composite on top of lower ones, regardless of actual Y position.
+  for (let i = 1; i <= 11; i++) {
+    scene.setRenderingAutoClearDepthStencil(i, true, true, false)
+  }
 
   const camera = new ArcRotateCamera('camera', -Math.PI / 4, Math.PI / 3.5, 24, Vector3.Zero(), scene)
   camera.lowerBetaLimit = Math.PI / 3.5

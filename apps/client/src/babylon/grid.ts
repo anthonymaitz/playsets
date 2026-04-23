@@ -12,15 +12,15 @@ function drawGridCell(ctx: CanvasRenderingContext2D, size: number, type: Backgro
   // Grid line color adapts to the scene mood, but fill comes from layer backgrounds
   let lineColor: string
   switch (type) {
-    case 'stars': lineColor = 'rgba(100,120,220,0.18)'; break
-    case 'ocean': lineColor = 'rgba(80,160,240,0.20)'; break
-    case 'snow':  lineColor = 'rgba(200,220,240,0.25)'; break
-    case 'lava':  lineColor = 'rgba(255,80,0,0.22)'; break
-    default:      lineColor = 'rgba(255,255,255,0.12)'; break
+    case 'stars': lineColor = 'rgba(100,120,220,0.45)'; break
+    case 'ocean': lineColor = 'rgba(80,160,240,0.45)'; break
+    case 'snow':  lineColor = 'rgba(200,220,240,0.50)'; break
+    case 'lava':  lineColor = 'rgba(255,80,0,0.45)'; break
+    default:      lineColor = 'rgba(255,255,255,0.35)'; break
   }
 
   ctx.strokeStyle = lineColor
-  ctx.lineWidth = 2
+  ctx.lineWidth = 3
   ctx.strokeRect(1, 1, size - 2, size - 2)
 }
 
@@ -43,6 +43,7 @@ export function createGrid(scene: Scene): Mesh {
   mat.useAlphaFromDiffuseTexture = true
   mat.specularColor = Color3.Black()
   ground.material = mat
+  ground.renderingGroupId = 10
 
   return ground
 }

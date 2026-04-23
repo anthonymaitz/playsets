@@ -7,12 +7,18 @@ interface Props {
   isHost: boolean
   layers: Record<number, LayerConfig>
   activeLayerIndex: number
+  selectedTokenLayer?: number | null
+  canMoveToken?: boolean
   onSelectLayer: (layerIndex: number) => void
   onToggleVisible: (layerIndex: number) => void
   onSetBackground: (layerIndex: number, bg: LayerBackground) => void
+  onMoveTokenLayer?: (delta: 1 | -1) => void
 }
 
-export function LayerPanel({ isHost, layers, activeLayerIndex, onSelectLayer, onToggleVisible, onSetBackground }: Props) {
+export function LayerPanel({
+  isHost, layers, activeLayerIndex, selectedTokenLayer, canMoveToken,
+  onSelectLayer, onToggleVisible, onSetBackground, onMoveTokenLayer,
+}: Props) {
   const [bgPickerFor, setBgPickerFor] = useState<number | null>(null)
 
   const handleCubeClick = (layerIndex: number) => {
@@ -35,6 +41,7 @@ export function LayerPanel({ isHost, layers, activeLayerIndex, onSelectLayer, on
       {Array.from({ length: LAYER_COUNT }, (_, i) => LAYER_COUNT - i).map((layerIndex) => {
         const cfg = layers[layerIndex] ?? { background: 'transparent', visible: true }
         const isActive = layerIndex === activeLayerIndex
+        const isTokenHere = selectedTokenLayer === layerIndex
         return (
           <div key={layerIndex} style={{ position: 'relative' }}>
             <button
@@ -49,6 +56,54 @@ export function LayerPanel({ isHost, layers, activeLayerIndex, onSelectLayer, on
                 active={isActive}
               />
             </button>
+
+            {/* Token location indicator */}
+            {isTokenHere && (
+              <div style={{
+                position: 'absolute', top: 2, right: 2,
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#60d0ff', border: '1px solid rgba(255,255,255,0.6)',
+                pointerEvents: 'none',
+              }} />
+            )}
+
+            {/* Token layer move controls — ▲▼ to the left of the panel */}
+            {isTokenHere && canMoveToken && (
+              <div style={{
+                position: 'absolute', left: -40, top: '50%', transform: 'translateY(-50%)',
+                display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center',
+              }}>
+                <button
+                  onClick={() => onMoveTokenLayer?.(1)}
+                  disabled={layerIndex >= LAYER_COUNT}
+                  title="Move token up a layer"
+                  style={{
+                    background: layerIndex < LAYER_COUNT ? 'rgba(96,208,255,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${layerIndex < LAYER_COUNT ? 'rgba(96,208,255,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    borderRadius: 3, color: layerIndex < LAYER_COUNT ? '#60d0ff' : 'rgba(255,255,255,0.2)',
+                    cursor: layerIndex < LAYER_COUNT ? 'pointer' : 'default',
+                    fontSize: 9, padding: '1px 4px', lineHeight: 1,
+                  }}
+                >▲</button>
+                <span style={{ fontSize: 7, color: '#60d0ff', lineHeight: 1, fontFamily: 'monospace' }}>
+                  L{layerIndex}
+                </span>
+                <button
+                  onClick={() => onMoveTokenLayer?.(-1)}
+                  disabled={layerIndex <= 1}
+                  title="Move token down a layer"
+                  style={{
+                    background: layerIndex > 1 ? 'rgba(96,208,255,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${layerIndex > 1 ? 'rgba(96,208,255,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    borderRadius: 3, color: layerIndex > 1 ? '#60d0ff' : 'rgba(255,255,255,0.2)',
+                    cursor: layerIndex > 1 ? 'pointer' : 'default',
+                    fontSize: 9, padding: '1px 4px', lineHeight: 1,
+                  }}
+                >▼</button>
+              </div>
+            )}
+
+            {/* Background settings gear (host + active layer) */}
             {isHost && isActive && (
               <button
                 onClick={() => setBgPickerFor(bgPickerFor === layerIndex ? null : layerIndex)}
