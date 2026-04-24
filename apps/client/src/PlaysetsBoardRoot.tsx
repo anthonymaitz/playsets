@@ -82,6 +82,8 @@ export function PlaysetsBoardRoot(props: Props) {
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
+  let buildPointerDownX = 0
+  let buildPointerDownY = 0
 
   function syncBuildings(sceneData: SceneData) {
     if (!bjsScene) return
@@ -176,9 +178,17 @@ export function PlaysetsBoardRoot(props: Props) {
       // General pointer observer — fires AFTER DragController's observer (added above)
       bjsScene.onPointerObservable.add((info) => {
         if (props.mode === 'build') {
+          if (info.type === PointerEventTypes.POINTERDOWN) {
+            buildPointerDownX = bjsScene!.pointerX
+            buildPointerDownY = bjsScene!.pointerY
+            return
+          }
           if (info.type !== PointerEventTypes.POINTERUP) return
           const dc = buildManagers()?.dragController
           if (dc?.consumeJustDropped()) return
+          const dx = bjsScene!.pointerX - buildPointerDownX
+          const dy = bjsScene!.pointerY - buildPointerDownY
+          if (dx * dx + dy * dy > 25) return  // >5px movement = camera pan, skip cellclick
           const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
           if (pick?.hit && pick.pickedPoint) {
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)

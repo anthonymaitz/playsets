@@ -13,35 +13,44 @@ class PlaysetsBoardElement extends HTMLElement {
 
   connectedCallback() {
     const canvas = document.createElement('canvas')
-    canvas.style.cssText = 'width:100%;height:100%;display:block;'
+    canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:block;'
     this.appendChild(canvas)
 
-    const [scene, setScene] = createSignal<SceneData>({})
-    const [entities, setEntities] = createSignal<EntityData[]>([])
-    const [mode, setMode] = createSignal<string>(this.getAttribute('mode') ?? 'explore')
-
-    this._setScene = setScene
-    this._setEntities = setEntities
-    this._setMode = setMode
-
-    // Parse attributes already present before connectedCallback
-    const initScene = this.getAttribute('scene')
-    if (initScene) try { setScene(JSON.parse(initScene) as SceneData) } catch { /* ignore */ }
-    const initEntities = this.getAttribute('entities')
-    if (initEntities) try { setEntities(JSON.parse(initEntities) as EntityData[]) } catch { /* ignore */ }
-
     const host = this
-    this._dispose = render(
-      // Reactive getters ensure props re-run effects inside PlaysetsBoardRoot when signals change
-      () => createComponent(PlaysetsBoardRoot, {
+    const initialMode = this.getAttribute('mode') ?? 'explore'
+    const initialScene = this.getAttribute('scene')
+    const initialEntities = this.getAttribute('entities')
+
+    // Signals created inside render() so they have a proper reactive owner
+    let _setScene: ((v: SceneData) => void) | null = null
+    let _setEntities: ((v: EntityData[]) => void) | null = null
+    let _setMode: ((v: string) => void) | null = null
+
+    this._dispose = render(() => {
+      const [scene, setScene] = createSignal<SceneData>(
+        initialScene ? (() => { try { return JSON.parse(initialScene) as SceneData } catch { return {} } })() : {},
+      )
+      const [entities, setEntities] = createSignal<EntityData[]>(
+        initialEntities ? (() => { try { return JSON.parse(initialEntities) as EntityData[] } catch { return [] } })() : [],
+      )
+      const [mode, setMode] = createSignal<string>(initialMode)
+
+      _setScene = setScene
+      _setEntities = setEntities
+      _setMode = setMode
+
+      return createComponent(PlaysetsBoardRoot, {
         host,
         canvas,
         get scene() { return scene() },
         get entities() { return entities() },
         get mode() { return mode() },
-      }),
-      this,
-    )
+      })
+    }, this)
+
+    this._setScene = _setScene
+    this._setEntities = _setEntities
+    this._setMode = _setMode
   }
 
   attributeChangedCallback(name: string, _old: string | null, newVal: string | null) {
