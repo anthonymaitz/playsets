@@ -1,22 +1,17 @@
-import type { ToolTab } from './BuilderRoot'
+export type ToolTab = 'build' | 'token' | 'prop'
 
 interface TileEntry { id: string; label: string; color: string }
 
 const WALL_TILES: TileEntry[] = [
-  { id: 'wall-wood', label: 'Wood Wall', color: '#8B4513' },
-  { id: 'wall-stone', label: 'Stone Wall', color: '#888' },
-  { id: 'wall-dirt', label: 'Dirt Wall', color: '#7a5c3a' },
+  { id: 'wall-wood', label: 'Wood', color: '#8B4513' },
+  { id: 'wall-stone', label: 'Stone', color: '#888' },
+  { id: 'wall-dirt', label: 'Dirt', color: '#7a5c3a' },
 ]
 
 const FLOOR_TILES: TileEntry[] = [
-  { id: 'floor-wood', label: 'Wood Floor', color: '#c8a05a' },
-  { id: 'floor-stone', label: 'Stone Floor', color: '#aaa' },
-  { id: 'floor-dirt', label: 'Dirt Floor', color: '#9e7a4a' },
-]
-
-const PROP_TILES: TileEntry[] = [
-  { id: 'bartop', label: 'Bar Top', color: '#7b4f1a' },
-  { id: 'rug', label: 'Rug', color: '#8b2020' },
+  { id: 'floor-wood', label: 'Wood', color: '#c8a05a' },
+  { id: 'floor-stone', label: 'Stone', color: '#aaa' },
+  { id: 'floor-dirt', label: 'Dirt', color: '#9e7a4a' },
 ]
 
 const TOKEN_TILES: TileEntry[] = [
@@ -26,49 +21,56 @@ const TOKEN_TILES: TileEntry[] = [
   { id: 'door:', label: 'Door', color: '#cc4444' },
 ]
 
-const ALL_TILES: Array<{ entry: TileEntry; tab: ToolTab }> = [
-  ...WALL_TILES.map(e => ({ entry: e, tab: 'wall' as ToolTab })),
-  ...FLOOR_TILES.map(e => ({ entry: e, tab: 'floor' as ToolTab })),
-  ...PROP_TILES.map(e => ({ entry: e, tab: 'prop' as ToolTab })),
-  ...TOKEN_TILES.map(e => ({ entry: e, tab: 'token' as ToolTab })),
-]
-
 const TABS: { id: ToolTab; label: string; emoji: string }[] = [
-  { id: 'wall', label: 'Walls', emoji: '🏗️' },
-  { id: 'floor', label: 'Floors', emoji: '🟫' },
-  { id: 'prop', label: 'Props', emoji: '🚪' },
+  { id: 'build', label: 'Build', emoji: '🏗️' },
   { id: 'token', label: 'Tokens', emoji: '🧙' },
+  { id: 'prop', label: 'Props', emoji: '🚪' },
 ]
 
 interface Props {
   selectedTab: ToolTab
   onSelectTab: (tab: ToolTab) => void
-  selectedTileId: string
-  onSelectTileId: (id: string) => void
+  wallTileId: string
+  onWallSelect: (id: string) => void
+  floorTileId: string
+  onFloorSelect: (id: string) => void
+  selectedTokenId: string
+  onTokenSelect: (id: string) => void
   buildMode: 'build' | 'erase'
   onBuildModeChange: (m: 'build' | 'erase') => void
-  mergeMode: 'open' | 'walled'
-  onMergeModeChange: (m: 'open' | 'walled') => void
   onSave: () => void
 }
 
-function firstTileForTab(tab: ToolTab): string {
-  if (tab === 'wall') return WALL_TILES[0]?.id ?? ''
-  if (tab === 'floor') return FLOOR_TILES[0]?.id ?? ''
-  if (tab === 'prop') return PROP_TILES[0]?.id ?? ''
-  return TOKEN_TILES[0]?.id ?? ''
+function TileRow(p: { label: string; tiles: TileEntry[]; selectedId: string; onSelect: (id: string) => void }) {
+  return (
+    <div style="margin-bottom:8px;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">
+        {p.label}
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        {p.tiles.map(tile => (
+          <button
+            onClick={() => p.onSelect(tile.id)}
+            title={tile.label}
+            style={`width:36px;height:36px;border:2px solid ${p.selectedId === tile.id ? '#f0a84a' : 'rgba(255,255,255,0.1)'};border-radius:4px;background:${p.selectedId === tile.id ? 'rgba(240,168,74,0.18)' : 'rgba(255,255,255,0.05)'};cursor:pointer;padding:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;`}
+          >
+            <div style={`width:22px;height:22px;background:${tile.color};border-radius:2px;`} />
+            <span style="font-size:7px;color:rgba(255,255,255,0.55);line-height:1;">{tile.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function BuilderToolbar(props: Props) {
-  const isBuildTab = () => props.selectedTab === 'wall' || props.selectedTab === 'floor'
-
   return (
     <div style="position:absolute;top:0;left:0;height:100%;width:160px;background:rgba(10,15,10,0.92);border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;pointer-events:all;z-index:10;">
       {/* Tab strip */}
       <div style="display:flex;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0;">
-        {TABS.map((tab) => (
+        {TABS.map(tab => (
           <button
-            onClick={() => { props.onSelectTab(tab.id); props.onSelectTileId(firstTileForTab(tab.id)) }}
+            onClick={() => props.onSelectTab(tab.id)}
             title={tab.label}
             style={`flex:1;padding:10px 2px;font-size:16px;cursor:pointer;background:${props.selectedTab === tab.id ? 'rgba(240,168,74,0.18)' : 'transparent'};color:#fff;border:none;border-bottom:2px solid ${props.selectedTab === tab.id ? '#f0a84a' : 'transparent'};`}
           >
@@ -77,31 +79,60 @@ export function BuilderToolbar(props: Props) {
         ))}
       </div>
 
-      {/* Build/Erase toggle — only shown for wall/floor tabs */}
-      {isBuildTab() && (
-        <div style="display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0;">
-          {(['build', 'erase'] as const).map(m => (
-            <button
-              onClick={() => props.onBuildModeChange(m)}
-              style={`flex:1;padding:4px 0;font-size:10px;font-weight:700;cursor:pointer;border:none;border-radius:3px;background:${props.buildMode === m ? '#c8893a' : 'rgba(255,255,255,0.06)'};color:${props.buildMode === m ? '#000' : 'rgba(255,255,255,0.5)'};text-transform:capitalize;`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Panel content */}
+      <div style="flex:1;overflow-y:auto;padding:10px 8px;min-height:0;">
 
-      {/* Tile list */}
-      <div style="flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:5px;min-height:0;">
-        {ALL_TILES.map(({ entry: tile, tab }) => (
-          <button
-            onClick={() => props.onSelectTileId(tile.id)}
-            style={`padding:6px;display:${props.selectedTab === tab ? 'flex' : 'none'};align-items:center;gap:6px;background:${props.selectedTileId === tile.id ? 'rgba(240,168,74,0.18)' : 'rgba(255,255,255,0.04)'};border:1px solid ${props.selectedTileId === tile.id ? '#f0a84a' : 'rgba(255,255,255,0.08)'};color:#fff;cursor:pointer;border-radius:4px;width:100%;text-align:left;`}
-          >
-            <div style={`width:24px;height:24px;background:${tile.color};border-radius:3px;flex-shrink:0;`} />
-            <span style="font-size:11px;">{tile.label}</span>
-          </button>
-        ))}
+        {/* Build tab */}
+        {props.selectedTab === 'build' && (
+          <div>
+            {/* Build / Erase toggle */}
+            <div style="display:flex;gap:4px;margin-bottom:10px;">
+              {(['build', 'erase'] as const).map(m => (
+                <button
+                  onClick={() => props.onBuildModeChange(m)}
+                  style={`flex:1;padding:5px 0;font-size:10px;font-weight:700;cursor:pointer;border:none;border-radius:3px;background:${props.buildMode === m ? '#c8893a' : 'rgba(255,255,255,0.06)'};color:${props.buildMode === m ? '#000' : 'rgba(255,255,255,0.5)'};text-transform:capitalize;`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+
+            <TileRow
+              label="Wall"
+              tiles={WALL_TILES}
+              selectedId={props.wallTileId}
+              onSelect={props.onWallSelect}
+            />
+            <TileRow
+              label="Floor"
+              tiles={FLOOR_TILES}
+              selectedId={props.floorTileId}
+              onSelect={props.onFloorSelect}
+            />
+          </div>
+        )}
+
+        {/* Token tab */}
+        {props.selectedTab === 'token' && (
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            {TOKEN_TILES.map(tile => (
+              <button
+                onClick={() => props.onTokenSelect(tile.id)}
+                style={`padding:6px;display:flex;align-items:center;gap:6px;background:${props.selectedTokenId === tile.id ? 'rgba(240,168,74,0.18)' : 'rgba(255,255,255,0.04)'};border:1px solid ${props.selectedTokenId === tile.id ? '#f0a84a' : 'rgba(255,255,255,0.08)'};color:#fff;cursor:pointer;border-radius:4px;width:100%;text-align:left;`}
+              >
+                <div style={`width:24px;height:24px;background:${tile.color};border-radius:3px;flex-shrink:0;`} />
+                <span style="font-size:11px;">{tile.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Prop tab */}
+        {props.selectedTab === 'prop' && (
+          <div style="padding:8px 0;">
+            <p style="font-size:10px;color:rgba(255,255,255,0.4);margin:0;">Props coming soon</p>
+          </div>
+        )}
       </div>
 
       {/* Save */}

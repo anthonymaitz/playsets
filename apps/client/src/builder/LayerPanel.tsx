@@ -2,66 +2,135 @@ import { createSignal } from 'solid-js'
 import type { LayerBackgroundManager } from '../babylon/layers'
 import type { LayerBackground } from '../types'
 
+const LAYER_COUNT = 9
+
+interface LayerState { visible: boolean; background: LayerBackground }
+
 interface Props {
-  weather: string
-  onWeatherChange: (w: string) => void
+  activeLayerIndex: number
+  onSelectLayer: (i: number) => void
   layerManager: LayerBackgroundManager
 }
 
-const WEATHER_OPTIONS = ['sunny', 'cloudy', 'night', 'rain']
-const BG_OPTIONS: LayerBackground[] = ['transparent', 'grass', 'dirt']
-const LAYER_COUNT = 9
-
 export function LayerPanel(props: Props) {
-  const [layerVisibility, setLayerVisibility] = createSignal<boolean[]>(Array(LAYER_COUNT).fill(true))
-  const [layerBg, setLayerBg] = createSignal<LayerBackground[]>(Array(LAYER_COUNT).fill('transparent' as LayerBackground))
+  const init = (): LayerState[] =>
+    Array.from({ length: LAYER_COUNT + 1 }, () => ({ visible: true, background: 'transparent' as LayerBackground }))
 
-  function toggleLayer(i: number) {
-    const next = [...layerVisibility()]
-    next[i] = !next[i]
-    setLayerVisibility(next)
-    props.layerManager.setVisible(i + 1, next[i])
+  const [layers, setLayers] = createSignal<LayerState[]>(init())
+  const [bgPickerFor, setBgPickerFor] = createSignal<number | null>(null)
+
+  function toggleVisible(layerIndex: number) {
+    const next = [...layers()]
+    next[layerIndex] = { ...next[layerIndex], visible: !next[layerIndex].visible }
+    setLayers(next)
+    props.layerManager.setVisible(layerIndex, next[layerIndex].visible)
   }
 
-  function changeBackground(i: number, bg: LayerBackground) {
-    const next = [...layerBg()]
-    next[i] = bg
-    setLayerBg(next)
-    props.layerManager.updateLayer(i + 1, { background: bg })
+  function setBackground(layerIndex: number, bg: LayerBackground) {
+    const next = [...layers()]
+    next[layerIndex] = { ...next[layerIndex], background: bg }
+    setLayers(next)
+    props.layerManager.updateLayer(layerIndex, { background: bg })
+    setBgPickerFor(null)
   }
+
+  function handleCubeClick(layerIndex: number) {
+    if (layerIndex === props.activeLayerIndex) {
+      toggleVisible(layerIndex)
+    } else {
+      props.onSelectLayer(layerIndex)
+      setBgPickerFor(null)
+    }
+  }
+
+  const indices = Array.from({ length: LAYER_COUNT }, (_, i) => LAYER_COUNT - i)
 
   return (
-    <div style="position:absolute;bottom:0;left:160px;right:0;background:rgba(20,20,20,0.88);padding:8px;display:flex;gap:12px;align-items:center;pointer-events:auto;z-index:10;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <span style="color:#aaa;font-size:11px;">Weather:</span>
-        <select
-          value={props.weather}
-          onChange={e => props.onWeatherChange((e.target as HTMLSelectElement).value)}
-          style="background:#333;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:11px;"
-        >
-          {WEATHER_OPTIONS.map(w => <option value={w}>{w}</option>)}
-        </select>
-      </div>
+    <div style="position:absolute;right:0;top:0;bottom:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;background:rgba(8,12,8,0.85);border-left:1px solid rgba(255,255,255,0.08);width:52px;pointer-events:auto;">
+      {indices.map(layerIndex => {
+        const cfg = () => layers()[layerIndex] ?? { background: 'transparent' as LayerBackground, visible: true }
+        const isActive = () => layerIndex === props.activeLayerIndex
 
-      <div style="display:flex;gap:6px;overflow-x:auto;flex:1;">
-        {Array.from({ length: LAYER_COUNT }, (_, i) => i).map(i => (
-          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-            <span style="color:#888;font-size:9px;">{`L${i + 1}`}</span>
-            <input
-              type="checkbox"
-              checked={layerVisibility()[i]}
-              onChange={() => toggleLayer(i)}
-            />
-            <select
-              value={layerBg()[i]}
-              onChange={e => changeBackground(i, (e.target as HTMLSelectElement).value as LayerBackground)}
-              style="background:#333;color:#fff;border:1px solid #555;font-size:9px;width:52px;"
+        return (
+          <div style="position:relative;">
+            <button
+              onClick={() => handleCubeClick(layerIndex)}
+              title={`Layer ${layerIndex}${layerIndex === 5 ? ' (Ground)' : ''}`}
+              style="background:none;border:none;cursor:pointer;padding:0;display:block;"
             >
-              {BG_OPTIONS.map(bg => <option value={bg}>{bg}</option>)}
-            </select>
+              <LayerCube
+                layerIndex={layerIndex}
+                bg={cfg().background}
+                visible={cfg().visible}
+                active={isActive()}
+              />
+            </button>
+
+            {/* Gear: opens background picker for active layer */}
+            {isActive() && (
+              <button
+                onClick={() => setBgPickerFor(bgPickerFor() === layerIndex ? null : layerIndex)}
+                title="Set background"
+                style="position:absolute;left:-18px;top:4px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:rgba(255,255,255,0.5);font-size:9px;cursor:pointer;padding:1px 3px;line-height:1;"
+              >
+                ⚙
+              </button>
+            )}
+
+            {/* Background picker dropdown */}
+            {bgPickerFor() === layerIndex && (
+              <div style="position:absolute;right:54px;top:0;background:rgba(10,15,10,0.96);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:30;min-width:100px;">
+                {(['transparent', 'grass', 'dirt'] as LayerBackground[]).map(bg => (
+                  <button
+                    onClick={() => setBackground(layerIndex, bg)}
+                    style={`background:${cfg().background === bg ? 'rgba(240,168,74,0.2)' : 'rgba(255,255,255,0.04)'};border:1px solid ${cfg().background === bg ? '#f0a84a' : 'rgba(255,255,255,0.1)'};border-radius:4px;color:${cfg().background === bg ? '#f0a84a' : 'rgba(255,255,255,0.6)'};cursor:pointer;font-size:10px;padding:4px 8px;text-align:left;`}
+                  >
+                    {bg === 'transparent' ? '✕ None' : bg === 'grass' ? '🌿 Grass' : '🟫 Dirt'}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        ))}
-      </div>
+        )
+      })}
     </div>
+  )
+}
+
+function LayerCube(p: { layerIndex: number; bg: LayerBackground; visible: boolean; active: boolean }) {
+  const W = 36, H = 28
+  const topColor = p.bg === 'grass' ? '#4a8a3a' : p.bg === 'dirt' ? '#5a3a1a' : 'rgba(255,255,255,0.07)'
+  const leftColor = p.bg === 'grass' ? '#3a6e2a' : p.bg === 'dirt' ? '#3a2010' : 'rgba(255,255,255,0.04)'
+  const rightColor = p.bg === 'grass' ? '#2d5a20' : p.bg === 'dirt' ? '#2e1a0c' : 'rgba(255,255,255,0.06)'
+  const stroke = p.active ? '#f0a84a' : 'rgba(255,255,255,0.2)'
+  const strokeW = p.active ? 2 : 1
+  const dash = p.visible ? undefined : '3,2'
+  const alpha = p.visible ? 1 : 0.3
+
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+      <polygon
+        points={`${W/2},3 ${W-2},${H/2-2} ${W/2},${H-4} 2,${H/2-2}`}
+        fill={topColor} stroke={stroke} stroke-width={strokeW}
+        stroke-dasharray={dash} fill-opacity={alpha}
+      />
+      <polygon
+        points={`2,${H/2-2} ${W/2},${H-4} ${W/2},${H+6} 2,${H/2+6}`}
+        fill={leftColor} stroke={stroke} stroke-width={strokeW}
+        stroke-dasharray={dash} fill-opacity={p.visible ? 1 : 0.2}
+      />
+      <polygon
+        points={`${W-2},${H/2-2} ${W/2},${H-4} ${W/2},${H+6} ${W-2},${H/2+6}`}
+        fill={rightColor} stroke={stroke} stroke-width={strokeW}
+        stroke-dasharray={dash} fill-opacity={p.visible ? 1 : 0.2}
+      />
+      {(p.active || !p.visible) && (
+        <text x={W/2} y={H/2+1} font-size={7}
+          fill={p.active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)'}
+          text-anchor="middle" font-family="monospace">
+          {p.layerIndex}
+        </text>
+      )}
+    </svg>
   )
 }
