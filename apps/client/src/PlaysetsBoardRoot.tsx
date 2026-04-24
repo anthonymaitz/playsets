@@ -1,4 +1,4 @@
-import { createEffect, on, onMount, onCleanup, createSignal, lazy, Suspense, Show } from 'solid-js'
+import { createEffect, on, onMount, onCleanup, createSignal, Show } from 'solid-js'
 import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera, Mesh } from '@babylonjs/core'
 import { MeshBuilder, StandardMaterial, Color3, Vector3 } from '@babylonjs/core'
@@ -12,9 +12,7 @@ import type { DragCallbacks } from './babylon/drag'
 import { WeatherSystem } from './babylon/weather'
 import { LayerBackgroundManager } from './babylon/layers'
 import type { WeatherType } from './types'
-
-// @ts-ignore — BuilderRoot created in Task 7; lazy import resolved at runtime by vite-plugin-solid
-const BuilderRoot = lazy(() => import('./builder/BuilderRoot'))
+import { BuilderRoot } from './builder/BuilderRoot'
 
 // Local SceneToken — structurally matches shared-types SceneToken
 export interface SceneToken {
@@ -241,7 +239,8 @@ export function PlaysetsBoardRoot(props: Props) {
         entityMeshes.clear()
         ctx.dispose()
       })
-    } catch {
+    } catch (err) {
+      console.error('[playsets-board] onMount error:', err)
       props.host.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { reason: 'webgl-unavailable' } }))
     }
   })
@@ -256,15 +255,12 @@ export function PlaysetsBoardRoot(props: Props) {
 
   return (
     <>
-      {/* @ts-ignore — tsconfig uses react-jsx but lib build uses vite-plugin-solid; Show/Suspense/lazy work at runtime */}
+      {/* @ts-ignore — tsconfig uses react-jsx but lib build uses vite-plugin-solid */}
       <Show when={buildManagers()}>
         {/* @ts-ignore */}
         {(managers: () => BuildManagers) => (
           // @ts-ignore
-          <Suspense>
-            {/* @ts-ignore */}
-            <BuilderRoot host={props.host} scene={props.scene} managers={managers()} />
-          </Suspense>
+          <BuilderRoot host={props.host} scene={props.scene} managers={managers()} />
         )}
       </Show>
     </>
