@@ -1,15 +1,38 @@
-import { createEffect, on, onMount, onCleanup } from 'solid-js'
+import { createEffect, on, onMount, onCleanup, createSignal, lazy, Suspense, Show } from 'solid-js'
 import { PointerEventTypes } from '@babylonjs/core'
-import type { Scene, Engine, ArcRotateCamera, Mesh } from '@babylonjs/core'
+import type { Scene, ArcRotateCamera, Mesh } from '@babylonjs/core'
 import { MeshBuilder, StandardMaterial, Color3, Vector3 } from '@babylonjs/core'
 import { createScene } from './babylon/scene'
 import { createGrid, worldToCell } from './babylon/grid'
 import { BuildingManager } from './babylon/buildings'
+import { PropManager } from './babylon/props'
+import { SpriteManager } from './babylon/sprites'
+import { DragController } from './babylon/drag'
+import type { DragCallbacks } from './babylon/drag'
+import { WeatherSystem } from './babylon/weather'
+import { LayerBackgroundManager } from './babylon/layers'
+import type { WeatherType } from './types'
+
+// @ts-ignore — BuilderRoot created in Task 7; lazy import resolved at runtime by vite-plugin-solid
+const BuilderRoot = lazy(() => import('./builder/BuilderRoot'))
+
+// Local SceneToken — structurally matches shared-types SceneToken
+export interface SceneToken {
+  id: string
+  type: 'npc' | 'door'
+  col: number
+  row: number
+  role?: 'innkeeper' | 'blacksmith' | 'doorkeeper'
+  name?: string
+  biomeId?: string
+  label?: string
+}
 
 export interface SceneData {
   buildings?: Array<{ col: number; row: number; tileId: string; instanceId?: string }>
   layers?: Array<{ id: number; background: string }>
   props?: Array<{ id: string; col: number; row: number; tileId: string }>
+  tokens?: SceneToken[]
   weather?: string
 }
 
@@ -20,6 +43,18 @@ export interface EntityData {
   y: number
   isMe?: boolean
   label?: string
+}
+
+export interface BuildManagers {
+  buildingManager: BuildingManager
+  propManager: PropManager
+  spriteManager: SpriteManager
+  dragController: DragController
+  weatherSystem: WeatherSystem
+  layerBackgroundManager: LayerBackgroundManager
+  dragCallbacks: DragCallbacks
+  bjsScene: Scene
+  bjsCamera: ArcRotateCamera
 }
 
 interface Props {
@@ -42,22 +77,18 @@ const WALL_COLOR = new Color3(0.5, 0.42, 0.35)
 const FLOOR_COLOR = new Color3(0.72, 0.65, 0.52)
 
 export function PlaysetsBoardRoot(props: Props) {
-  let bjsEngine: Engine | null = null
   let bjsScene: Scene | null = null
+  let bjsCamera: ArcRotateCamera | null = null
   let buildingMeshes = new Map<string, Mesh>()
   const entityMeshes = new Map<string, Mesh>()
+  const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
-  // -- drag state --
   let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
 
   function syncBuildings(sceneData: SceneData) {
     if (!bjsScene) return
-    for (const m of buildingMeshes.values()) {
-      m.material?.dispose()
-      m.dispose()
-    }
+    for (const m of buildingMeshes.values()) { m.material?.dispose(); m.dispose() }
     buildingMeshes.clear()
-
     for (const b of sceneData.buildings ?? []) {
       const key = b.instanceId ?? `${b.col},${b.row}`
       const isWall = !b.tileId.includes('floor')
@@ -97,122 +128,145 @@ export function PlaysetsBoardRoot(props: Props) {
       mesh.position = new Vector3(e.x, 0.45, e.y)
     }
     for (const [id, mesh] of entityMeshes) {
-      if (!seen.has(id)) {
-        mesh.material?.dispose()
-        mesh.dispose()
-        entityMeshes.delete(id)
-      }
+      if (!seen.has(id)) { mesh.material?.dispose(); mesh.dispose(); entityMeshes.delete(id) }
     }
   }
 
   onMount(() => {
     try {
       const ctx = createScene(props.canvas)
-      bjsEngine = ctx.engine
       bjsScene = ctx.scene
+      bjsCamera = ctx.camera
+      const ground = createGrid(bjsScene)
 
-      createGrid(bjsScene)
+      if (props.mode !== 'build') {
+        syncBuildings(props.scene)
+        syncEntities(props.entities)
+      } else {
+        const bm = new BuildingManager(bjsScene)
+        const pm = new PropManager(bjsScene)
+        const sm = new SpriteManager(bjsScene, bjsCamera ?? undefined)
+        const ws = new WeatherSystem(bjsScene, ground, ctx.ambientLight, bjsCamera!)
+        const lm = new LayerBackgroundManager(bjsScene, {})
+        ws.setWeather((props.scene.weather ?? 'sunny') as WeatherType)
 
-      syncBuildings(props.scene)
-      syncEntities(props.entities)
+        const dragCbs: DragCallbacks = {
+          onDragMove: () => {},
+          onDragDrop: (instanceId, col, row) => {
+            props.host.dispatchEvent(
+              new CustomEvent('tokenmove', { bubbles: true, detail: { id: instanceId, x: col, y: row } }),
+            )
+          },
+          onSpriteClick: () => {},
+          canDrop: () => true,
+        }
+        // IMPORTANT: DragController adds its observer here — must be BEFORE the general observer below
+        const dc = new DragController(bjsScene, sm, bjsCamera!, dragCbs)
 
-      // Cellclick: ground pick on pointer up (when not dragging)
+        setBuildManagers({ buildingManager: bm, propManager: pm, spriteManager: sm, dragController: dc, weatherSystem: ws, layerBackgroundManager: lm, dragCallbacks: dragCbs, bjsScene: bjsScene!, bjsCamera: bjsCamera! })
+
+        onCleanup(() => {
+          dc.dispose()
+          bm.dispose()
+          pm.dispose()
+          sm.clear()
+          ws.dispose()
+          lm.dispose()
+        })
+      }
+
+      // General pointer observer — fires AFTER DragController's observer (added above)
       bjsScene.onPointerObservable.add((info) => {
-        if (info.type === PointerEventTypes.POINTERUP) {
-          if (dragging) {
-            const pick = bjsScene!.pick(
-              bjsScene!.pointerX,
-              bjsScene!.pointerY,
-              (m) => m.name === 'ground',
-            )
-            if (pick?.hit && pick.pickedPoint) {
-              const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-              props.host.dispatchEvent(
-                new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }),
-              )
-            }
-            dragging = null
-          } else {
-            const pick = bjsScene!.pick(
-              bjsScene!.pointerX,
-              bjsScene!.pointerY,
-              (m) => m.name === 'ground',
-            )
-            if (pick?.hit && pick.pickedPoint) {
-              const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-              props.host.dispatchEvent(
-                new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }),
-              )
-            }
+        if (props.mode === 'build') {
+          if (info.type !== PointerEventTypes.POINTERUP) return
+          const dc = buildManagers()?.dragController
+          if (dc?.consumeJustDropped()) return
+          const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+          if (pick?.hit && pick.pickedPoint) {
+            const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+            props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
           }
           return
         }
 
+        // Explore mode pointer logic (unchanged)
+        if (info.type === PointerEventTypes.POINTERUP) {
+          if (dragging) {
+            bjsCamera?.attachControl(true, false, 0)
+            const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+            if (pick?.hit && pick.pickedPoint) {
+              const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+              props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
+            }
+            dragging = null
+          } else {
+            const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+            if (pick?.hit && pick.pickedPoint) {
+              const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+              props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
+            }
+          }
+          return
+        }
         if (info.type === PointerEventTypes.POINTERDOWN) {
-          const pickResult = bjsScene!.pick(
-            bjsScene!.pointerX,
-            bjsScene!.pointerY,
-            (m) => !!(m.metadata?.draggable),
-          )
+          const pickResult = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.draggable))
           if (pickResult?.pickedMesh?.metadata?.entityId) {
             const entityId = pickResult.pickedMesh.metadata.entityId as string
             const mesh = entityMeshes.get(entityId)
             if (mesh) {
               const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
               dragging = { entityId, lastCol: col, lastRow: row }
+              bjsCamera?.detachControl()
             }
           }
           return
         }
-
         if (info.type === PointerEventTypes.POINTERMOVE && dragging) {
-          const pick = bjsScene!.pick(
-            bjsScene!.pointerX,
-            bjsScene!.pointerY,
-            (m) => m.name === 'ground',
-          )
+          const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
           if (pick?.hit && pick.pickedPoint) {
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
             if (col !== dragging.lastCol || row !== dragging.lastRow) {
               dragging.lastCol = col
               dragging.lastRow = row
-              props.host.dispatchEvent(
-                new CustomEvent('tokendrag', {
-                  bubbles: true,
-                  detail: { id: dragging.entityId, x: col, y: row },
-                }),
-              )
+              props.host.dispatchEvent(new CustomEvent('tokendrag', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
             }
           }
         }
       })
 
-      const handleResize = () => bjsEngine?.resize()
-      window.addEventListener('resize', handleResize)
       onCleanup(() => {
-        window.removeEventListener('resize', handleResize)
         for (const m of buildingMeshes.values()) { m.material?.dispose(); m.dispose() }
         buildingMeshes.clear()
         for (const m of entityMeshes.values()) { m.material?.dispose(); m.dispose() }
         entityMeshes.clear()
-        bjsEngine?.dispose()
-        bjsEngine = null
-        bjsScene = null
+        ctx.dispose()
       })
     } catch {
-      props.host.dispatchEvent(
-        new CustomEvent('error', { bubbles: true, detail: { reason: 'webgl-unavailable' } }),
-      )
+      props.host.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { reason: 'webgl-unavailable' } }))
     }
   })
 
   createEffect(on(() => props.scene, (sceneData) => {
-    syncBuildings(sceneData)
+    if (props.mode !== 'build') syncBuildings(sceneData)
   }, { defer: true }))
 
   createEffect(on(() => props.entities, (entities) => {
-    syncEntities(entities)
+    if (props.mode !== 'build') syncEntities(entities)
   }, { defer: true }))
 
-  return <>{/* canvas is passed in from board-element.ts, babylon renders directly into it */}</>
+  return (
+    <>
+      {/* @ts-ignore — tsconfig uses react-jsx but lib build uses vite-plugin-solid; Show/Suspense/lazy work at runtime */}
+      <Show when={buildManagers()}>
+        {/* @ts-ignore */}
+        {(managers: () => BuildManagers) => (
+          // @ts-ignore
+          <Suspense>
+            {/* @ts-ignore */}
+            <BuilderRoot host={props.host} scene={props.scene} managers={managers()} />
+          </Suspense>
+        )}
+      </Show>
+    </>
+  )
 }
