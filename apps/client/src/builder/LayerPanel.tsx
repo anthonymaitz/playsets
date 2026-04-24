@@ -17,21 +17,17 @@ export function LayerPanel(props: Props) {
   const [layerBg, setLayerBg] = createSignal<LayerBackground[]>(Array(LAYER_COUNT).fill('transparent' as LayerBackground))
 
   function toggleLayer(i: number) {
-    setLayerVisibility(prev => {
-      const next = [...prev]
-      next[i] = !next[i]
-      props.layerManager.setVisible(i + 1, next[i])
-      return next
-    })
+    const next = [...layerVisibility()]
+    next[i] = !next[i]
+    setLayerVisibility(next)
+    props.layerManager.setVisible(i + 1, next[i])
   }
 
   function changeBackground(i: number, bg: LayerBackground) {
-    setLayerBg(prev => {
-      const next = [...prev]
-      next[i] = bg
-      props.layerManager.updateLayer(i + 1, { background: bg })
-      return next
-    })
+    const next = [...layerBg()]
+    next[i] = bg
+    setLayerBg(next)
+    props.layerManager.updateLayer(i + 1, { background: bg })
   }
 
   return (
