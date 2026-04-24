@@ -108,6 +108,7 @@ export function BuilderRoot(props: Props) {
   function handleTokenMove(e: Event) {
     const { id, x, y } = (e as CustomEvent<{ id: string; x: number; y: number }>).detail
     if (isWall(x, y)) return
+    props.managers.spriteManager.move(id, x, y)
     setTokens(prev => prev.map(t => t.id === id ? { ...t, col: x, row: y } : t))
   }
 
