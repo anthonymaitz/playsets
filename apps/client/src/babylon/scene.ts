@@ -93,9 +93,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 
   const cancelSnap = () => scene.stopAnimation(camera)
 
-  // Only snap after right-click release (rotation gesture), not after left-click (pan)
-  const onPointerUp = (e: PointerEvent) => { if (e.button === 2) snapToIsometric() }
-  const onPointerDown = () => cancelSnap()
+  // Snap whenever alpha actually changed (rotation), regardless of which button.
+  // Panning moves the target point, not alpha, so this safely ignores pan gestures.
+  let alphaOnDown = camera.alpha
+  const onPointerUp = () => { if (Math.abs(camera.alpha - alphaOnDown) > 0.02) snapToIsometric() }
+  const onPointerDown = () => { alphaOnDown = camera.alpha; cancelSnap() }
 
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('pointerdown', onPointerDown)
