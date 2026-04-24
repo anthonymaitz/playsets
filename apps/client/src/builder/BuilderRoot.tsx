@@ -1,9 +1,11 @@
-import { createSignal, onMount, onCleanup } from 'solid-js'
+import { createSignal, createEffect, on, onMount, onCleanup } from 'solid-js'
 import { PointerEventTypes, Vector3, Matrix } from '@babylonjs/core'
+import { nanoid } from 'nanoid'
 import type { BuildManagers, SceneData, SceneToken } from '../PlaysetsBoardRoot'
-import type { BuildingTile } from '../types'
+import type { BuildingTile, BuilderProp, WeatherType } from '../types'
 import { worldToCell } from '../babylon/grid'
 import { normalizeRect } from '../babylon/buildingUtils'
+import { getPropCategory } from '../babylon/props'
 import { BuilderToolbar } from './BuilderToolbar'
 import type { ToolTab } from './BuilderToolbar'
 import { LayerPanel } from './LayerPanel'
@@ -31,6 +33,11 @@ function tokenDataUri(type: string, role?: string): string {
   )}`
 }
 
+function tokenColor(tokenId: string): string {
+  const [type, role] = tokenId.split(':')
+  return type === 'door' ? '#cc4444' : (NPC_COLOR_MAP[role ?? ''] ?? '#4488cc')
+}
+
 interface Props {
   host: HTMLElement
   scene: SceneData
@@ -44,16 +51,25 @@ export function BuilderRoot(props: Props) {
   const [wallTileId, setWallTileId] = createSignal('wall-wood')
   const [floorTileId, setFloorTileId] = createSignal('floor-dirt')
   const [selectedTokenId, setSelectedTokenId] = createSignal('npc:innkeeper')
+  const [selectedPropId, setSelectedPropId] = createSignal('door-wood')
   const [buildMode, setBuildMode] = createSignal<'build' | 'erase'>('build')
   const [buildings, setBuildings] = createSignal<BuildingTile[]>([])
   const [tokens, setTokens] = createSignal<SceneToken[]>([])
-  const [weather] = createSignal(props.scene.weather ?? 'sunny')
+  const [placedProps, setPlacedProps] = createSignal<BuilderProp[]>([])
+  const [weather, setWeather] = createSignal<string>(props.scene.weather ?? 'sunny')
   const [activeLayerIndex, setActiveLayerIndex] = createSignal(5)
   const [screenCorners, setScreenCorners] = createSignal<ScreenCorners | null>(null)
+  const [toolbarDragToken, setToolbarDragToken] = createSignal<string | null>(null)
+  const [ghostPos, setGhostPos] = createSignal<{ x: number; y: number } | null>(null)
 
   let previewEnd: { col: number; row: number } | null = null
   let draggingCorner: 'nw' | 'ne' | 'sw' | 'se' | null = null
   let isDragPreview = false
+
+  // Reactively update WeatherSystem when the weather signal changes
+  createEffect(on(weather, (w) => {
+    props.managers.weatherSystem.setWeather(w as WeatherType)
+  }, { defer: true }))
 
   function tilePath(id: string) { return `/assets/tiles/${id}.svg` }
 
@@ -165,6 +181,26 @@ export function BuilderRoot(props: Props) {
     setTokens(prev => [...prev.filter(t => !(t.col === col && t.row === row)), token])
   }
 
+  function handlePropClick(col: number, row: number) {
+    const propId = selectedPropId()
+    const { propManager, buildingManager } = props.managers
+    const existing = placedProps().find(p => p.col === col && p.row === row)
+    if (existing) {
+      propManager.remove(existing.instanceId, buildingManager)
+      setPlacedProps(prev => prev.filter(p => p.instanceId !== existing.instanceId))
+    }
+    const prop: BuilderProp = {
+      instanceId: nanoid(),
+      propId,
+      col,
+      row,
+      state: {},
+      layerIndex: activeLayerIndex(),
+    }
+    propManager.place(prop, getPropCategory(propId), buildingManager)
+    setPlacedProps(prev => [...prev.filter(p => !(p.col === col && p.row === row)), prop])
+  }
+
   function handleTokenMove(e: Event) {
     const { id, x, y } = (e as CustomEvent<{ id: string; x: number; y: number }>).detail
     if (isWallAt(x, y)) return
@@ -176,7 +212,7 @@ export function BuilderRoot(props: Props) {
     const sceneData: SceneData = {
       buildings: buildings().map(b => ({ col: b.col, row: b.row, tileId: b.tileId, instanceId: b.instanceId })),
       layers: props.scene.layers ?? [],
-      props: props.scene.props ?? [],
+      props: placedProps().map(p => ({ id: p.instanceId, col: p.col, row: p.row, tileId: p.propId })),
       tokens: tokens(),
       weather: weather(),
     }
@@ -184,7 +220,7 @@ export function BuilderRoot(props: Props) {
   }
 
   onMount(() => {
-    const { buildingManager, spriteManager, weatherSystem, bjsScene } = props.managers
+    const { buildingManager, propManager, spriteManager, weatherSystem, bjsScene } = props.managers
 
     const initBuildings: BuildingTile[] = (props.scene.buildings ?? []).map(b => ({
       instanceId: b.instanceId ?? `${b.col},${b.row}`,
@@ -195,6 +231,17 @@ export function BuilderRoot(props: Props) {
     buildingManager.loadSnapshot(initBuildings)
     setBuildings(initBuildings)
 
+    // Load any existing props from the scene
+    const initProps: BuilderProp[] = (props.scene.props ?? []).map(p => ({
+      instanceId: p.id,
+      propId: p.tileId,
+      col: p.col,
+      row: p.row,
+      state: {},
+    }))
+    propManager.loadSnapshot(initProps, getPropCategory, buildingManager)
+    setPlacedProps(initProps)
+
     for (const t of props.scene.tokens ?? []) {
       spriteManager.place(
         { instanceId: t.id, spriteId: `tokens/${t.type}`, col: t.col, row: t.row, placedBy: 'builder' },
@@ -202,7 +249,7 @@ export function BuilderRoot(props: Props) {
       )
     }
     setTokens(props.scene.tokens ?? [])
-    weatherSystem.setWeather(weather() as Parameters<typeof weatherSystem.setWeather>[0])
+    weatherSystem.setWeather(weather() as WeatherType)
 
     // Update screen-space corners every frame while a preview is active
     const renderObserver = bjsScene.onBeforeRenderObservable.add(() => {
@@ -212,7 +259,6 @@ export function BuilderRoot(props: Props) {
       setScreenCorners(next)
     })
 
-    // Pick filter: ground plane + btile meshes (BuildingManager prefix)
     const isBuildMesh = (m: { name: string }) =>
       m.name === 'ground' || m.name.startsWith('btile-') || m.name.startsWith('_wa-') || m.name.startsWith('_wb-')
 
@@ -221,6 +267,8 @@ export function BuilderRoot(props: Props) {
       const mode = buildMode()
 
       if (info.type === PointerEventTypes.POINTERDOWN) {
+        // Ignore clicks that originate from a toolbar token drag — handled by window listeners
+        if (toolbarDragToken()) return
         const pick = bjsScene.pick(bjsScene.pointerX, bjsScene.pointerY, isBuildMesh)
         if (!pick.hit || !pick.pickedPoint) return
         const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
@@ -249,29 +297,80 @@ export function BuilderRoot(props: Props) {
 
       if (info.type === PointerEventTypes.POINTERUP) {
         isDragPreview = false
-        if (tab === 'token') {
+        if (tab === 'token' && !toolbarDragToken()) {
           const pick = bjsScene.pick(bjsScene.pointerX, bjsScene.pointerY, isBuildMesh)
           if (pick.hit && pick.pickedPoint) {
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
             handleTokenClick(col, row)
           }
+        } else if (tab === 'prop') {
+          const pick = bjsScene.pick(bjsScene.pointerX, bjsScene.pointerY, isBuildMesh)
+          if (pick.hit && pick.pickedPoint) {
+            const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+            handlePropClick(col, row)
+          }
         }
       }
     })
 
-    // Window listeners so corner-drag works when pointer leaves the canvas
+    // Corner drag via window-level pointer events
     const onWindowMove = (e: PointerEvent) => {
-      if (!draggingCorner || !previewEnd) return
-      const canvas = bjsScene.getEngine().getRenderingCanvas()
-      if (!canvas) return
-      const rect = canvas.getBoundingClientRect()
-      const pick = bjsScene.pick(e.clientX - rect.left, e.clientY - rect.top, isBuildMesh)
-      if (!pick.hit || !pick.pickedPoint) return
-      const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-      buildingManager.updatePreview(col, row, tilePath(wallTileId()), tilePath(floorTileId()))
-      previewEnd = { col, row }
+      if (draggingCorner && previewEnd) {
+        const canvas = bjsScene.getEngine().getRenderingCanvas()
+        if (!canvas) return
+        const rect = canvas.getBoundingClientRect()
+        const engine = bjsScene.getEngine()
+        const scaleX = engine.getRenderWidth() / rect.width
+        const scaleY = engine.getRenderHeight() / rect.height
+        const pick = bjsScene.pick(
+          (e.clientX - rect.left) * scaleX,
+          (e.clientY - rect.top) * scaleY,
+          isBuildMesh,
+        )
+        if (!pick.hit || !pick.pickedPoint) return
+        const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+        buildingManager.updatePreview(col, row, tilePath(wallTileId()), tilePath(floorTileId()))
+        previewEnd = { col, row }
+      }
+
+      // Token ghost drag position
+      if (toolbarDragToken()) setGhostPos({ x: e.clientX, y: e.clientY })
     }
-    const onWindowUp = () => { draggingCorner = null }
+
+    const onWindowUp = (e: PointerEvent) => {
+      // Finish corner drag
+      if (draggingCorner) { draggingCorner = null; return }
+
+      // Finish token toolbar drag — drop onto canvas
+      const tokenId = toolbarDragToken()
+      if (tokenId) {
+        setToolbarDragToken(null)
+        setGhostPos(null)
+        const canvas = bjsScene.getEngine().getRenderingCanvas()
+        if (!canvas) return
+        const rect = canvas.getBoundingClientRect()
+        if (
+          e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top  && e.clientY <= rect.bottom
+        ) {
+          const engine = bjsScene.getEngine()
+          const scaleX = engine.getRenderWidth() / rect.width
+          const scaleY = engine.getRenderHeight() / rect.height
+          const pick = bjsScene.pick(
+            (e.clientX - rect.left) * scaleX,
+            (e.clientY - rect.top) * scaleY,
+            isBuildMesh,
+          )
+          if (pick.hit && pick.pickedPoint) {
+            const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+            const savedId = selectedTokenId()
+            setSelectedTokenId(tokenId)
+            handleTokenClick(col, row)
+            setSelectedTokenId(savedId)
+          }
+        }
+      }
+    }
 
     window.addEventListener('pointermove', onWindowMove)
     window.addEventListener('pointerup', onWindowUp)
@@ -286,8 +385,6 @@ export function BuilderRoot(props: Props) {
     })
   })
 
-  // --- JSX ---
-  // screenCorners() is read reactively inside the ternary — SolidJS updates the DOM when it changes
   return (
     <div style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
       <BuilderToolbar
@@ -299,8 +396,17 @@ export function BuilderRoot(props: Props) {
         onFloorSelect={setFloorTileId}
         selectedTokenId={selectedTokenId()}
         onTokenSelect={setSelectedTokenId}
+        onTokenPointerDown={(tokenId, e) => {
+          e.preventDefault()
+          setToolbarDragToken(tokenId)
+          setGhostPos({ x: e.clientX, y: e.clientY })
+        }}
+        selectedPropId={selectedPropId()}
+        onPropSelect={setSelectedPropId}
         buildMode={buildMode()}
         onBuildModeChange={setBuildMode}
+        weather={weather()}
+        onWeatherChange={setWeather}
         onSave={handleSave}
       />
 
@@ -310,7 +416,14 @@ export function BuilderRoot(props: Props) {
         layerManager={props.managers.layerBackgroundManager}
       />
 
-      {/* Corner handles — rendered reactively via screenCorners() reads */}
+      {/* Token drag ghost */}
+      {toolbarDragToken() !== null && ghostPos() !== null && (
+        <div
+          style={`position:fixed;pointer-events:none;z-index:50;width:28px;height:28px;border-radius:50%;border:2px solid #f0a84a;box-shadow:0 2px 8px rgba(0,0,0,0.6);transform:translate(-50%,-50%);left:${ghostPos()?.x ?? 0}px;top:${ghostPos()?.y ?? 0}px;background:${tokenColor(toolbarDragToken()!)};`}
+        />
+      )}
+
+      {/* Corner handles + Place Room strip */}
       {screenCorners() !== null && (
         <div style="position:fixed;top:0;left:0;pointer-events:none;z-index:20;">
           <div

@@ -46,7 +46,7 @@ export function LayerPanel(props: Props) {
   const indices = Array.from({ length: LAYER_COUNT }, (_, i) => LAYER_COUNT - i)
 
   return (
-    <div style="position:absolute;right:0;top:0;bottom:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;background:rgba(8,12,8,0.85);border-left:1px solid rgba(255,255,255,0.08);width:52px;pointer-events:auto;">
+    <div style="position:absolute;right:0;top:0;bottom:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;background:rgba(8,12,8,0.85);border-left:1px solid rgba(255,255,255,0.08);width:56px;pointer-events:auto;">
       {indices.map(layerIndex => {
         const cfg = () => layers()[layerIndex] ?? { background: 'transparent' as LayerBackground, visible: true }
         const isActive = () => layerIndex === props.activeLayerIndex
@@ -55,8 +55,8 @@ export function LayerPanel(props: Props) {
           <div style="position:relative;">
             <button
               onClick={() => handleCubeClick(layerIndex)}
-              title={`Layer ${layerIndex}${layerIndex === 5 ? ' (Ground)' : ''}`}
-              style="background:none;border:none;cursor:pointer;padding:0;display:block;"
+              title={`Layer ${layerIndex}${layerIndex === 5 ? ' (Ground)' : ''}${isActive() ? ' — click to toggle visibility' : ' — click to select'}`}
+              style="background:none;border:none;cursor:pointer;padding:0;display:block;position:relative;"
             >
               <LayerCube
                 layerIndex={layerIndex}
@@ -64,6 +64,12 @@ export function LayerPanel(props: Props) {
                 visible={cfg().visible}
                 active={isActive()}
               />
+              {/* Visibility overlay: eye-slash when hidden */}
+              {!cfg().visible && (
+                <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+                  <span style="font-size:13px;line-height:1;filter:drop-shadow(0 0 2px #000);">🚫</span>
+                </div>
+              )}
             </button>
 
             {/* Gear: opens background picker for active layer */}
@@ -71,7 +77,7 @@ export function LayerPanel(props: Props) {
               <button
                 onClick={() => setBgPickerFor(bgPickerFor() === layerIndex ? null : layerIndex)}
                 title="Set background"
-                style="position:absolute;left:-18px;top:4px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:rgba(255,255,255,0.5);font-size:9px;cursor:pointer;padding:1px 3px;line-height:1;"
+                style="position:absolute;left:-20px;top:4px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:rgba(255,255,255,0.5);font-size:9px;cursor:pointer;padding:1px 3px;line-height:1;"
               >
                 ⚙
               </button>
@@ -79,7 +85,7 @@ export function LayerPanel(props: Props) {
 
             {/* Background picker dropdown */}
             {bgPickerFor() === layerIndex && (
-              <div style="position:absolute;right:54px;top:0;background:rgba(10,15,10,0.96);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:30;min-width:100px;">
+              <div style="position:absolute;right:58px;top:0;background:rgba(10,15,10,0.96);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:30;min-width:100px;">
                 {(['transparent', 'grass', 'dirt'] as LayerBackground[]).map(bg => (
                   <button
                     onClick={() => setBackground(layerIndex, bg)}
@@ -93,6 +99,11 @@ export function LayerPanel(props: Props) {
           </div>
         )
       })}
+
+      {/* Legend */}
+      <div style="margin-top:4px;font-size:8px;color:rgba(255,255,255,0.25);text-align:center;line-height:1.3;">
+        Click active<br/>= toggle vis
+      </div>
     </div>
   )
 }
@@ -102,31 +113,32 @@ function LayerCube(p: { layerIndex: number; bg: LayerBackground; visible: boolea
   const topColor = p.bg === 'grass' ? '#4a8a3a' : p.bg === 'dirt' ? '#5a3a1a' : 'rgba(255,255,255,0.07)'
   const leftColor = p.bg === 'grass' ? '#3a6e2a' : p.bg === 'dirt' ? '#3a2010' : 'rgba(255,255,255,0.04)'
   const rightColor = p.bg === 'grass' ? '#2d5a20' : p.bg === 'dirt' ? '#2e1a0c' : 'rgba(255,255,255,0.06)'
-  const stroke = p.active ? '#f0a84a' : 'rgba(255,255,255,0.2)'
+  // Active = orange border. Hidden = red border. Normal = dim white.
+  const stroke = p.active ? '#f0a84a' : !p.visible ? '#cc4444' : 'rgba(255,255,255,0.2)'
   const strokeW = p.active ? 2 : 1
-  const dash = p.visible ? undefined : '3,2'
-  const alpha = p.visible ? 1 : 0.3
+  const alpha = p.visible ? 1 : 0.25
 
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
       <polygon
         points={`${W/2},3 ${W-2},${H/2-2} ${W/2},${H-4} 2,${H/2-2}`}
         fill={topColor} stroke={stroke} stroke-width={strokeW}
-        stroke-dasharray={dash} fill-opacity={alpha}
+        fill-opacity={alpha}
       />
       <polygon
         points={`2,${H/2-2} ${W/2},${H-4} ${W/2},${H+6} 2,${H/2+6}`}
         fill={leftColor} stroke={stroke} stroke-width={strokeW}
-        stroke-dasharray={dash} fill-opacity={p.visible ? 1 : 0.2}
+        fill-opacity={alpha}
       />
       <polygon
         points={`${W-2},${H/2-2} ${W/2},${H-4} ${W/2},${H+6} ${W-2},${H/2+6}`}
         fill={rightColor} stroke={stroke} stroke-width={strokeW}
-        stroke-dasharray={dash} fill-opacity={p.visible ? 1 : 0.2}
+        fill-opacity={alpha}
       />
-      {(p.active || !p.visible) && (
+      {/* Show layer number on active layer or when it has a non-transparent background */}
+      {(p.active || p.bg !== 'transparent') && (
         <text x={W/2} y={H/2+1} font-size={7}
-          fill={p.active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)'}
+          fill={p.active ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)'}
           text-anchor="middle" font-family="monospace">
           {p.layerIndex}
         </text>
