@@ -13,7 +13,7 @@ class PlaysetsBoardElement extends HTMLElement {
 
   connectedCallback() {
     const canvas = document.createElement('canvas')
-    canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;display:block;'
+    canvas.style.cssText = 'width:100%;height:100%;display:block;'
     this.appendChild(canvas)
 
     const host = this

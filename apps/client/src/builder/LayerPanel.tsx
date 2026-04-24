@@ -31,26 +31,22 @@ export function LayerPanel(props: Props) {
   }
 
   return (
-    <div style={{
-      position: 'absolute', bottom: 0, left: '160px', right: 0,
-      background: 'rgba(20,20,20,0.88)', padding: '8px', display: 'flex',
-      gap: '12px', alignItems: 'center', pointerEvents: 'all', zIndex: 10,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <span style={{ color: '#aaa', fontSize: '11px' }}>Weather:</span>
+    <div style="position:absolute;bottom:0;left:160px;right:0;background:rgba(20,20,20,0.88);padding:8px;display:flex;gap:12px;align-items:center;pointer-events:auto;z-index:10;">
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="color:#aaa;font-size:11px;">Weather:</span>
         <select
           value={props.weather}
-          onChange={e => props.onWeatherChange(e.currentTarget.value)}
-          style={{ background: '#333', color: '#fff', border: '1px solid #555', borderRadius: '3px', padding: '2px 4px', fontSize: '11px' }}
+          onChange={e => props.onWeatherChange((e.target as HTMLSelectElement).value)}
+          style="background:#333;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:11px;"
         >
-          {WEATHER_OPTIONS.map(w => <option key={w} value={w}>{w}</option>)}
+          {WEATHER_OPTIONS.map(w => <option value={w}>{w}</option>)}
         </select>
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', flex: 1 }}>
+      <div style="display:flex;gap:6px;overflow-x:auto;flex:1;">
         {Array.from({ length: LAYER_COUNT }, (_, i) => i).map(i => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-            <span style={{ color: '#888', fontSize: '9px' }}>L{i + 1}</span>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <span style="color:#888;font-size:9px;">{`L${i + 1}`}</span>
             <input
               type="checkbox"
               checked={layerVisibility()[i]}
@@ -58,10 +54,10 @@ export function LayerPanel(props: Props) {
             />
             <select
               value={layerBg()[i]}
-              onChange={e => changeBackground(i, e.currentTarget.value as LayerBackground)}
-              style={{ background: '#333', color: '#fff', border: '1px solid #555', fontSize: '9px', width: '52px' }}
+              onChange={e => changeBackground(i, (e.target as HTMLSelectElement).value as LayerBackground)}
+              style="background:#333;color:#fff;border:1px solid #555;font-size:9px;width:52px;"
             >
-              {BG_OPTIONS.map(bg => <option key={bg} value={bg}>{bg}</option>)}
+              {BG_OPTIONS.map(bg => <option value={bg}>{bg}</option>)}
             </select>
           </div>
         ))}

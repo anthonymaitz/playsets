@@ -129,7 +129,7 @@ export function BuilderRoot(props: Props) {
   }
 
   return (
-    <div style={{ position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', pointerEvents: 'none' }}>
+    <div style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
       <BuilderToolbar
         selectedTab={selectedTab()}
         onSelectTab={setSelectedTab}
