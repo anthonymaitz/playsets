@@ -1,4 +1,5 @@
 import { createEffect, on, onMount, onCleanup, createSignal, Show } from 'solid-js'
+import type { HighlightCell } from './board-element'
 import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera, Mesh } from '@babylonjs/core'
 import { MeshBuilder, StandardMaterial, Color3, Vector3 } from '@babylonjs/core'
@@ -43,6 +44,7 @@ export interface EntityData {
   x: number
   y: number
   isMe?: boolean
+  isGhost?: boolean
   label?: string
 }
 
@@ -64,6 +66,7 @@ interface Props {
   scene: SceneData
   entities: EntityData[]
   mode: string
+  highlights?: HighlightCell[]
 }
 
 const ENTITY_COLORS: Record<string, Color3> = {
@@ -89,6 +92,7 @@ export function PlaysetsBoardRoot(props: Props) {
   let buildingManager: BuildingManager | null = null
   let weatherSystem: WeatherSystem | null = null
   const entityMeshes = new Map<string, Mesh>()
+  const highlightMeshes: Mesh[] = []
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
@@ -108,6 +112,7 @@ export function PlaysetsBoardRoot(props: Props) {
         const mat = new StandardMaterial(`emat-${e.id}`, bjsScene)
         const colorKey = e.type === 'player' && e.isMe ? 'player_me' : e.type
         mat.diffuseColor = ENTITY_COLORS[colorKey] ?? ENTITY_COLORS.npc
+        if (e.isGhost) mat.alpha = 0.35
         mesh.material = mat
         mesh.renderingGroupId = 6
         mesh.metadata = { entityId: e.id, draggable: e.type === 'player' && e.isMe }
@@ -117,6 +122,35 @@ export function PlaysetsBoardRoot(props: Props) {
     }
     for (const [id, mesh] of entityMeshes) {
       if (!seen.has(id)) { mesh.material?.dispose(); mesh.dispose(); entityMeshes.delete(id) }
+    }
+  }
+
+  function syncHighlights(cells: HighlightCell[]) {
+    if (!bjsScene) return
+    for (const m of highlightMeshes) { m.material?.dispose(); m.dispose() }
+    highlightMeshes.length = 0
+
+    const colorMap: Record<string, [number, number, number]> = {
+      move:    [0.2, 0.8, 0.2],
+      ability: [0.9, 0.5, 0.1],
+      target:  [0.9, 0.2, 0.2],
+    }
+
+    for (const cell of cells) {
+      const mesh = MeshBuilder.CreateGround(
+        `hl-${cell.x}-${cell.y}`,
+        { width: 0.9, height: 0.9 },
+        bjsScene,
+      )
+      mesh.position = new Vector3(cell.x + 0.5, 0.01, cell.y + 0.5)
+      mesh.renderingGroupId = 6
+      mesh.isPickable = false
+      const mat = new StandardMaterial(`hlmat-${cell.x}-${cell.y}`, bjsScene)
+      const [r, g, b] = colorMap[cell.kind] ?? [1, 1, 1]
+      mat.diffuseColor = new Color3(r, g, b)
+      mat.alpha = 0.4
+      mesh.material = mat
+      highlightMeshes.push(mesh)
     }
   }
 
@@ -182,6 +216,8 @@ export function PlaysetsBoardRoot(props: Props) {
         onCleanup(() => {
           for (const m of entityMeshes.values()) { m.material?.dispose(); m.dispose() }
           entityMeshes.clear()
+          for (const m of highlightMeshes) { m.material?.dispose(); m.dispose() }
+          highlightMeshes.length = 0
           buildingManager?.dispose()
           buildingManager = null
           weatherSystem?.dispose()
@@ -270,6 +306,10 @@ export function PlaysetsBoardRoot(props: Props) {
   createEffect(on(() => props.entities, (entities) => {
     if (props.mode !== 'build') syncEntities(entities)
   }, { defer: true }))
+
+  createEffect(on(() => props.highlights, (cells) => {
+    syncHighlights(cells ?? [])
+  }, { defer: false }))
 
   return (
     <>
