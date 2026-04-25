@@ -5,6 +5,7 @@ import { MeshBuilder, StandardMaterial, Color3, Vector3 } from '@babylonjs/core'
 import { createScene } from './babylon/scene'
 import { createGrid, worldToCell } from './babylon/grid'
 import { BuildingManager } from './babylon/buildings'
+import type { BuildingTile } from './types'
 import { PropManager } from './babylon/props'
 import { SpriteManager } from './babylon/sprites'
 import { DragController } from './babylon/drag'
@@ -17,13 +18,15 @@ import { BuilderRoot } from './builder/BuilderRoot'
 // Local SceneToken — structurally matches shared-types SceneToken
 export interface SceneToken {
   id: string
-  type: 'npc' | 'door'
+  type: 'npc' | 'door' | 'enemy' | 'spawn-point'
   col: number
   row: number
-  role?: 'innkeeper' | 'blacksmith' | 'doorkeeper'
+  role?: string
   name?: string
   biomeId?: string
   label?: string
+  level?: number
+  spawnRadius?: number
 }
 
 export interface SceneData {
@@ -71,38 +74,24 @@ const ENTITY_COLORS: Record<string, Color3> = {
   door:      new Color3(0.30, 0.69, 0.31),
 }
 
-const WALL_COLOR = new Color3(0.5, 0.42, 0.35)
-const FLOOR_COLOR = new Color3(0.72, 0.65, 0.52)
+function sceneBuildings(sceneData: SceneData): BuildingTile[] {
+  return (sceneData.buildings ?? []).map(b => ({
+    instanceId: b.instanceId ?? `${b.col},${b.row}`,
+    tileId: b.tileId,
+    col: b.col,
+    row: b.row,
+  }))
+}
 
 export function PlaysetsBoardRoot(props: Props) {
   let bjsScene: Scene | null = null
   let bjsCamera: ArcRotateCamera | null = null
-  let buildingMeshes = new Map<string, Mesh>()
+  let buildingManager: BuildingManager | null = null
+  let weatherSystem: WeatherSystem | null = null
   const entityMeshes = new Map<string, Mesh>()
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
-
-  function syncBuildings(sceneData: SceneData) {
-    if (!bjsScene) return
-    for (const m of buildingMeshes.values()) { m.material?.dispose(); m.dispose() }
-    buildingMeshes.clear()
-    for (const b of sceneData.buildings ?? []) {
-      const key = b.instanceId ?? `${b.col},${b.row}`
-      const isWall = !b.tileId.includes('floor')
-      const mesh = MeshBuilder.CreateBox(
-        `building-${key}`,
-        { width: 1, height: isWall ? 2 : 0.1, depth: 1 },
-        bjsScene,
-      )
-      mesh.position = new Vector3(b.col, isWall ? 1 : 0, b.row)
-      mesh.isPickable = false
-      const mat = new StandardMaterial(`bmat-${key}`, bjsScene)
-      mat.diffuseColor = isWall ? WALL_COLOR : FLOOR_COLOR
-      mesh.material = mat
-      buildingMeshes.set(key, mesh)
-    }
-  }
 
   function syncEntities(entities: EntityData[]) {
     if (!bjsScene) return
@@ -137,16 +126,18 @@ export function PlaysetsBoardRoot(props: Props) {
       bjsCamera = ctx.camera
       const ground = createGrid(bjsScene)
 
-      if (props.mode !== 'build') {
-        syncBuildings(props.scene)
-        syncEntities(props.entities)
-      } else {
-        const bm = new BuildingManager(bjsScene)
+      // Always use BuildingManager for proper isometric tile rendering
+      buildingManager = new BuildingManager(bjsScene)
+      buildingManager.loadSnapshot(sceneBuildings(props.scene))
+
+      // Weather applies to both modes
+      weatherSystem = new WeatherSystem(bjsScene, ground, ctx.ambientLight, bjsCamera!)
+      weatherSystem.setWeather((props.scene.weather ?? 'sunny') as WeatherType)
+
+      if (props.mode === 'build') {
         const pm = new PropManager(bjsScene)
         const sm = new SpriteManager(bjsScene, bjsCamera ?? undefined)
-        const ws = new WeatherSystem(bjsScene, ground, ctx.ambientLight, bjsCamera!)
         const lm = new LayerBackgroundManager(bjsScene, {})
-        ws.setWeather((props.scene.weather ?? 'sunny') as WeatherType)
 
         const dragCbs: DragCallbacks = {
           onDragMove: () => {},
@@ -161,30 +152,52 @@ export function PlaysetsBoardRoot(props: Props) {
         // IMPORTANT: DragController adds its observer here — must be BEFORE the general observer below
         const dc = new DragController(bjsScene, sm, bjsCamera!, dragCbs)
 
-        setBuildManagers({ buildingManager: bm, propManager: pm, spriteManager: sm, dragController: dc, weatherSystem: ws, layerBackgroundManager: lm, dragCallbacks: dragCbs, bjsScene: bjsScene!, bjsCamera: bjsCamera! })
+        setBuildManagers({
+          buildingManager: buildingManager!,
+          propManager: pm,
+          spriteManager: sm,
+          dragController: dc,
+          weatherSystem: weatherSystem!,
+          layerBackgroundManager: lm,
+          dragCallbacks: dragCbs,
+          bjsScene: bjsScene!,
+          bjsCamera: bjsCamera!,
+        })
 
         onCleanup(() => {
           dc.dispose()
-          bm.dispose()
+          buildingManager?.dispose()
+          buildingManager = null
           pm.dispose()
           sm.clear()
-          ws.dispose()
+          weatherSystem?.dispose()
+          weatherSystem = null
           lm.dispose()
+        })
+      } else {
+        // Explore mode: entity cylinders for players/NPCs
+        syncEntities(props.entities)
+
+        onCleanup(() => {
+          for (const m of entityMeshes.values()) { m.material?.dispose(); m.dispose() }
+          entityMeshes.clear()
+          buildingManager?.dispose()
+          buildingManager = null
+          weatherSystem?.dispose()
+          weatherSystem = null
         })
       }
 
       // General pointer observer — fires AFTER DragController's observer (added above)
       bjsScene.onPointerObservable.add((info) => {
         if (props.mode === 'build') {
-          // Build mode pointer events are handled by BuilderRoot's own observer.
-          // Only consume the "just dropped" flag here so token drops don't leak.
           if (info.type === PointerEventTypes.POINTERUP) {
             buildManagers()?.dragController.consumeJustDropped()
           }
           return
         }
 
-        // Explore mode pointer logic (unchanged)
+        // Explore mode pointer logic
         if (info.type === PointerEventTypes.POINTERUP) {
           if (dragging) {
             bjsCamera?.attachControl(true, false, 0)
@@ -195,10 +208,19 @@ export function PlaysetsBoardRoot(props: Props) {
             }
             dragging = null
           } else {
-            const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
-            if (pick?.hit && pick.pickedPoint) {
-              const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+            // Prioritize entity mesh pick so clicking an NPC/door cylinder fires the
+            // correct cell even when the isometric ray misses the ground cell beneath it.
+            const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.entityId))
+            if (entityPick?.hit && entityPick.pickedMesh) {
+              const pos = entityPick.pickedMesh.position
+              const { col, row } = worldToCell(pos.x, pos.z)
               props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
+            } else {
+              const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+              if (pick?.hit && pick.pickedPoint) {
+                const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
+                props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
+              }
             }
           }
           return
@@ -229,21 +251,19 @@ export function PlaysetsBoardRoot(props: Props) {
         }
       })
 
-      onCleanup(() => {
-        for (const m of buildingMeshes.values()) { m.material?.dispose(); m.dispose() }
-        buildingMeshes.clear()
-        for (const m of entityMeshes.values()) { m.material?.dispose(); m.dispose() }
-        entityMeshes.clear()
-        ctx.dispose()
-      })
+      onCleanup(() => ctx.dispose())
     } catch (err) {
       console.error('[playsets-board] onMount error:', err)
       props.host.dispatchEvent(new CustomEvent('error', { bubbles: true, detail: { reason: 'webgl-unavailable' } }))
     }
   })
 
+  // Reactive scene update — replace buildings + weather when scene data changes (explore mode)
   createEffect(on(() => props.scene, (sceneData) => {
-    if (props.mode !== 'build') syncBuildings(sceneData)
+    if (props.mode !== 'build') {
+      if (buildingManager) buildingManager.loadSnapshot(sceneBuildings(sceneData))
+      if (weatherSystem) weatherSystem.setWeather((sceneData.weather ?? 'sunny') as WeatherType)
+    }
   }, { defer: true }))
 
   createEffect(on(() => props.entities, (entities) => {
