@@ -19,6 +19,8 @@ const TOKEN_TILES: TileEntry[] = [
   { id: 'npc:blacksmith', label: 'Blacksmith', color: '#c07020' },
   { id: 'npc:doorkeeper', label: 'Doorkeeper', color: '#6040c0' },
   { id: 'door:', label: 'Door', color: '#cc4444' },
+  { id: 'enemy:skeleton', label: 'Skeleton', color: '#8a8a8a' },
+  { id: 'spawn-point:', label: 'Spawn Pt', color: '#cc6600' },
 ]
 
 const PROP_TILES: TileEntry[] = [
