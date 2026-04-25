@@ -267,6 +267,7 @@ export function BuilderRoot(props: Props) {
       const mode = buildMode()
 
       if (info.type === PointerEventTypes.POINTERDOWN) {
+        if ((info.event as PointerEvent).button !== 0) return  // left button only
         // Ignore clicks that originate from a toolbar token drag — handled by window listeners
         if (toolbarDragToken()) return
         const pick = bjsScene.pick(bjsScene.pointerX, bjsScene.pointerY, isBuildMesh)

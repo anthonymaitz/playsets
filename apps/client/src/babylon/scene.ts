@@ -82,6 +82,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     const target = Math.round((current - OFFSET) / SNAP) * SNAP + OFFSET
     if (Math.abs(current - target) < 0.001) return
     scene.stopAnimation(camera)
+    // Reset Babylon's camera input state — if the pointer was released outside the
+    // canvas (e.g., over a toolbar), Babylon never saw the pointerup and keeps the
+    // camera in rotation mode, which fights the animation. Detach/reattach clears it.
+    camera.detachControl()
+    camera.attachControl(true, false, 0)
     Animation.CreateAndStartAnimation(
       'cam-snap', camera, 'alpha',
       60, 36,
@@ -99,8 +104,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const onPointerUp = () => { if (Math.abs(camera.alpha - alphaOnDown) > 0.02) snapToIsometric() }
   const onPointerDown = () => { alphaOnDown = camera.alpha; cancelSnap() }
 
-  canvas.addEventListener('pointerup', onPointerUp)
-  canvas.addEventListener('pointerdown', onPointerDown)
+  const preventContextMenu = (e: Event) => e.preventDefault()
+
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('contextmenu', preventContextMenu)
 
   // Two-finger touch: horizontal swipe rotates, pinch zooms.
   // We intercept and prevent BabylonJS pointer events for 2-finger gestures.
@@ -165,8 +173,9 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     camera,
     ambientLight: light,
     dispose: () => {
-      canvas.removeEventListener('pointerup', onPointerUp)
-      canvas.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('contextmenu', preventContextMenu)
       canvas.removeEventListener('touchstart', onTouchStart)
       canvas.removeEventListener('touchmove', onTouchMove)
       canvas.removeEventListener('touchend', onTouchEnd)
