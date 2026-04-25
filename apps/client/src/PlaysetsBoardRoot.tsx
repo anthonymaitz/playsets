@@ -96,6 +96,7 @@ export function PlaysetsBoardRoot(props: Props) {
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
+  let ghostMesh: Mesh | null = null
 
   function syncEntities(entities: EntityData[]) {
     if (!bjsScene) return
@@ -243,6 +244,12 @@ export function PlaysetsBoardRoot(props: Props) {
               const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
               props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
             }
+            // Dispose ghost
+            if (ghostMesh) {
+              ghostMesh.material?.dispose()
+              ghostMesh.dispose()
+              ghostMesh = null
+            }
             dragging = null
           } else {
             // Prioritize entity mesh pick so clicking an NPC/door cylinder fires the
@@ -271,6 +278,20 @@ export function PlaysetsBoardRoot(props: Props) {
               const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
               dragging = { entityId, lastCol: col, lastRow: row }
               bjsCamera?.detachControl()
+
+              // Create translucent ghost at the token's current position
+              ghostMesh = MeshBuilder.CreateCylinder(
+                `ghost-${entityId}`,
+                { diameter: 0.6, height: 0.7, tessellation: 12 },
+                bjsScene!,
+              )
+              ghostMesh.position = mesh.position.clone()
+              ghostMesh.isPickable = false
+              ghostMesh.renderingGroupId = 6
+              const ghostMat = new StandardMaterial(`ghostmat-${entityId}`, bjsScene!)
+              ghostMat.diffuseColor = (mesh.material as StandardMaterial).diffuseColor.clone()
+              ghostMat.alpha = 0.45
+              ghostMesh.material = ghostMat
             }
           }
           return
@@ -278,6 +299,10 @@ export function PlaysetsBoardRoot(props: Props) {
         if (info.type === PointerEventTypes.POINTERMOVE && dragging) {
           const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
           if (pick?.hit && pick.pickedPoint) {
+            // Move ghost to world-space cursor position
+            if (ghostMesh) {
+              ghostMesh.position = new Vector3(pick.pickedPoint.x, 0.45, pick.pickedPoint.z)
+            }
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
             if (col !== dragging.lastCol || row !== dragging.lastRow) {
               dragging.lastCol = col
