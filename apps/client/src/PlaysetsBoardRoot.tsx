@@ -109,10 +109,11 @@ export function PlaysetsBoardRoot(props: Props) {
         const colorKey = e.type === 'player' && e.isMe ? 'player_me' : e.type
         mat.diffuseColor = ENTITY_COLORS[colorKey] ?? ENTITY_COLORS.npc
         mesh.material = mat
+        mesh.renderingGroupId = 6
         mesh.metadata = { entityId: e.id, draggable: e.type === 'player' && e.isMe }
         entityMeshes.set(e.id, mesh)
       }
-      mesh.position = new Vector3(e.x, 0.45, e.y)
+      mesh.position = new Vector3(e.x + 0.5, 0.45, e.y + 0.5)
     }
     for (const [id, mesh] of entityMeshes) {
       if (!seen.has(id)) { mesh.material?.dispose(); mesh.dispose(); entityMeshes.delete(id) }
