@@ -6,7 +6,7 @@ import type { SceneData, EntityData } from './PlaysetsBoardRoot'
 export interface HighlightCell {
   x: number
   y: number
-  kind: 'move' | 'ability' | 'target'
+  kind: 'move' | 'ability' | 'target' | 'drop' | 'dialog' | 'encounter'
 }
 
 class PlaysetsBoardElement extends HTMLElement {

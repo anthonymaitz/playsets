@@ -46,6 +46,7 @@ export interface EntityData {
   isMe?: boolean
   isGhost?: boolean
   label?: string
+  direction?: string
 }
 
 export interface BuildManagers {
@@ -120,6 +121,9 @@ export function PlaysetsBoardRoot(props: Props) {
         entityMeshes.set(e.id, mesh)
       }
       mesh.position = new Vector3(e.x + 0.5, 0.45, e.y + 0.5)
+      // Rotate to face direction (isometric: Y is Z in world space)
+      const dirAngles: Record<string, number> = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 }
+      mesh.rotation.y = dirAngles[e.direction ?? 's'] ?? 0
     }
     for (const [id, mesh] of entityMeshes) {
       if (!seen.has(id)) { mesh.material?.dispose(); mesh.dispose(); entityMeshes.delete(id) }
@@ -132,9 +136,12 @@ export function PlaysetsBoardRoot(props: Props) {
     highlightMeshes.length = 0
 
     const colorMap: Record<string, [number, number, number]> = {
-      move:    [0.2, 0.8, 0.2],
-      ability: [0.9, 0.5, 0.1],
-      target:  [0.9, 0.2, 0.2],
+      move:      [0.2, 0.8, 0.2],
+      ability:   [0.9, 0.5, 0.1],
+      target:    [0.9, 0.2, 0.2],
+      drop:      [0.75, 0.75, 0.75],
+      dialog:    [0.2, 0.5, 1.0],
+      encounter: [0.9, 0.2, 0.2],
     }
 
     for (const cell of cells) {
