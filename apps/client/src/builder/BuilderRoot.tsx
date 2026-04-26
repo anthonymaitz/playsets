@@ -1,8 +1,8 @@
-import { createSignal, createEffect, on, onMount, onCleanup } from 'solid-js'
+import { createSignal, createEffect, on, onMount, onCleanup, Show } from 'solid-js'
 import { PointerEventTypes, Vector3, Matrix } from '@babylonjs/core'
 import { nanoid } from 'nanoid'
 import type { BuildManagers, SceneData, SceneToken } from '../PlaysetsBoardRoot'
-import type { BuildingTile, BuilderProp, WeatherType } from '../types'
+import type { BuildingTile, BuilderProp, WeatherType, FacingDir } from '../types'
 import { worldToCell } from '../babylon/grid'
 import { normalizeRect } from '../babylon/buildingUtils'
 import { getPropCategory } from '../babylon/props'
@@ -61,6 +61,8 @@ export function BuilderRoot(props: Props) {
   const [screenCorners, setScreenCorners] = createSignal<ScreenCorners | null>(null)
   const [toolbarDragToken, setToolbarDragToken] = createSignal<string | null>(null)
   const [ghostPos, setGhostPos] = createSignal<{ x: number; y: number } | null>(null)
+  const [contextMenuId, setContextMenuId] = createSignal<string | null>(null)
+  const [contextMenuPos, setContextMenuPos] = createSignal<{ x: number; y: number } | null>(null)
 
   let previewEnd: { col: number; row: number } | null = null
   let draggingCorner: 'nw' | 'ne' | 'sw' | 'se' | null = null
@@ -173,9 +175,10 @@ export function BuilderRoot(props: Props) {
     const token: SceneToken = {
       id, type: tokenType as 'npc' | 'door', col, row,
       role: tokenRole as SceneToken['role'], name: tokenRole,
+      direction: 's',
     }
     props.managers.spriteManager.place(
-      { instanceId: id, spriteId: `tokens/${tokenType}`, col, row, placedBy: 'builder' },
+      { instanceId: id, spriteId: `tokens/${tokenType}`, col, row, placedBy: 'builder', facing: 's' },
       tokenDataUri(tokenType, tokenRole),
     )
     setTokens(prev => [...prev.filter(t => !(t.col === col && t.row === row)), token])
@@ -206,6 +209,43 @@ export function BuilderRoot(props: Props) {
     if (isWallAt(x, y)) return
     props.managers.spriteManager.move(id, x, y)
     setTokens(prev => prev.map(t => t.id === id ? { ...t, col: x, row: y } : t))
+  }
+
+  function getMeshScreenPos(instanceId: string): { x: number; y: number } | null {
+    const { bjsScene, bjsCamera, spriteManager } = props.managers
+    const mesh = spriteManager.getMesh(instanceId)
+    if (!mesh) return null
+    const engine = bjsScene.getEngine()
+    const canvas = engine.getRenderingCanvas()
+    if (!canvas) return null
+    const viewport = bjsCamera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
+    const transform = bjsScene.getTransformMatrix()
+    const canvasBounds = canvas.getBoundingClientRect()
+    const scaleX = canvasBounds.width / engine.getRenderWidth()
+    const scaleY = canvasBounds.height / engine.getRenderHeight()
+    const worldTop = new Vector3(mesh.position.x, 1.6, mesh.position.z)
+    const s = Vector3.Project(worldTop, Matrix.Identity(), transform, viewport)
+    return { x: s.x * scaleX + canvasBounds.left, y: s.y * scaleY + canvasBounds.top }
+  }
+
+  function dismissContextMenu() {
+    setContextMenuId(null)
+    setContextMenuPos(null)
+  }
+
+  function handleContextFacing(dir: FacingDir) {
+    const id = contextMenuId()
+    if (!id) return
+    props.managers.spriteManager.setFacing(id, dir)
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, direction: dir } : t))
+  }
+
+  function handleContextDelete() {
+    const id = contextMenuId()
+    if (!id) return
+    props.managers.spriteManager.remove(id)
+    setTokens(prev => prev.filter(t => t.id !== id))
+    dismissContextMenu()
   }
 
   function handleSave() {
@@ -244,7 +284,7 @@ export function BuilderRoot(props: Props) {
 
     for (const t of props.scene.tokens ?? []) {
       spriteManager.place(
-        { instanceId: t.id, spriteId: `tokens/${t.type}`, col: t.col, row: t.row, placedBy: 'builder' },
+        { instanceId: t.id, spriteId: `tokens/${t.type}`, col: t.col, row: t.row, placedBy: 'builder', facing: (t.direction ?? 's') as FacingDir },
         tokenDataUri(t.type, t.role),
       )
     }
@@ -373,15 +413,30 @@ export function BuilderRoot(props: Props) {
       }
     }
 
+    props.managers.dragCallbacks.onSpriteClick = (instanceId) => {
+      const pos = getMeshScreenPos(instanceId)
+      if (!pos) return
+      setContextMenuId(instanceId)
+      setContextMenuPos(pos)
+    }
+
+    const onDocClick = (e: MouseEvent) => {
+      const menu = document.getElementById('token-ctx-menu')
+      if (menu && !menu.contains(e.target as Node)) dismissContextMenu()
+    }
+
     window.addEventListener('pointermove', onWindowMove)
     window.addEventListener('pointerup', onWindowUp)
+    window.addEventListener('click', onDocClick, true)
     props.host.addEventListener('tokenmove', handleTokenMove)
 
     onCleanup(() => {
+      props.managers.dragCallbacks.onSpriteClick = () => {}
       bjsScene.onPointerObservable.remove(pointerObserver)
       bjsScene.onBeforeRenderObservable.remove(renderObserver)
       window.removeEventListener('pointermove', onWindowMove)
       window.removeEventListener('pointerup', onWindowUp)
+      window.removeEventListener('click', onDocClick, true)
       props.host.removeEventListener('tokenmove', handleTokenMove)
     })
   })
@@ -423,6 +478,40 @@ export function BuilderRoot(props: Props) {
           style={`position:fixed;pointer-events:none;z-index:50;width:28px;height:28px;border-radius:50%;border:2px solid #f0a84a;box-shadow:0 2px 8px rgba(0,0,0,0.6);transform:translate(-50%,-50%);left:${ghostPos()?.x ?? 0}px;top:${ghostPos()?.y ?? 0}px;background:${tokenColor(toolbarDragToken()!)};`}
         />
       )}
+
+      {/* Token context menu */}
+      <Show when={contextMenuId() !== null && contextMenuPos() !== null}>
+        {() => {
+          const token = () => tokens().find(t => t.id === contextMenuId())
+          const facing = () => (tokens().find(t => t.id === contextMenuId())?.direction as FacingDir) ?? 's'
+          const pos = contextMenuPos()!
+          const label = () => { const t = token(); return t ? `${t.type}${t.role ? ` (${t.role})` : ''}` : contextMenuId()! }
+          return (
+            <div
+              id="token-ctx-menu"
+              style={`position:fixed;pointer-events:auto;z-index:60;left:${pos.x}px;top:${pos.y}px;transform:translate(-50%,-100%) translateY(-8px);background:rgba(10,14,10,0.94);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px 10px;box-shadow:0 4px 18px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:6px;min-width:140px;font-family:monospace;`}
+            >
+              <div style="color:rgba(200,137,58,0.9);font-size:10px;font-weight:700;text-align:center;">{label()}</div>
+              <div style="display:flex;justify-content:center;gap:4px;">
+                {(['n','e','s','w'] as FacingDir[]).map(dir => (
+                  <button
+                    onClick={() => handleContextFacing(dir)}
+                    style={`width:28px;height:28px;border-radius:5px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:11px;font-weight:700;color:#fff;background:${facing() === dir ? '#4a7a40' : 'rgba(40,50,40,0.9)'};`}
+                  >
+                    {dir.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleContextDelete}
+                style="padding:4px 8px;border-radius:5px;background:#7a2020;color:#fff;font-size:10px;font-weight:700;cursor:pointer;border:none;"
+              >
+                Delete
+              </button>
+            </div>
+          )
+        }}
+      </Show>
 
       {/* Corner handles + Place Room strip */}
       {screenCorners() !== null && (

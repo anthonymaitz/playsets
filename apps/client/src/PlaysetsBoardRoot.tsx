@@ -27,6 +27,7 @@ export interface SceneToken {
   label?: string
   level?: number
   spawnRadius?: number
+  direction?: string
 }
 
 export interface SceneData {
