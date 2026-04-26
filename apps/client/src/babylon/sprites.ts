@@ -77,14 +77,10 @@ export class SpriteManager {
   }
 
   private getTexture(path: string): Texture {
-    if (path.startsWith('data:')) {
-      const tex = new Texture(path, this.scene, false, true)
-      tex.hasAlpha = true
-      return tex
-    }
     const cached = this.textureCache.get(path)
     if (cached) return cached
     const tex = new Texture(path, this.scene, false, true)
+    tex.hasAlpha = true
     this.textureCache.set(path, tex)
     return tex
   }
@@ -241,18 +237,16 @@ export class SpriteManager {
     if (!mesh) return
     const mat = mesh.material as StandardMaterial
     const oldTex = mat.diffuseTexture
-    const tex = new Texture(url, this.scene, false, true)
-    tex.hasAlpha = true
+    const tex = this.getTexture(url)
     mat.diffuseTexture = tex
-    oldTex?.dispose()
+    if (oldTex && oldTex !== tex) oldTex.dispose()
 
     const shadow = this.tokenShadows.get(instanceId)
     if (shadow && shadow.material instanceof StandardMaterial) {
       const sm = shadow.material as StandardMaterial
       const oldShadowTex = sm.diffuseTexture
-      sm.diffuseTexture = new Texture(url, this.scene, false, true)
-      sm.diffuseTexture.hasAlpha = true
-      oldShadowTex?.dispose()
+      sm.diffuseTexture = this.getTexture(url)
+      if (oldShadowTex && oldShadowTex !== sm.diffuseTexture) oldShadowTex.dispose()
     }
   }
 
@@ -268,17 +262,15 @@ export class SpriteManager {
         : (mesh.metadata.backDataUrl ?? mesh.metadata.frontDataUrl ?? basePath)
       const mat = mesh.material as StandardMaterial
       const oldTex = mat.diffuseTexture
-      const tex = new Texture(url, this.scene, false, true)
-      tex.hasAlpha = true
+      const tex = this.getTexture(url)
       mat.diffuseTexture = tex
-      oldTex?.dispose()
+      if (oldTex && oldTex !== tex) oldTex.dispose()
       const sp = this.tokenShadows.get(instanceId)
       if (sp && sp.material instanceof StandardMaterial) {
         const sm = sp.material as StandardMaterial
         const oldShadowTex = sm.diffuseTexture
-        sm.diffuseTexture = new Texture(url, this.scene, false, true)
-        sm.diffuseTexture.hasAlpha = true
-        oldShadowTex?.dispose()
+        sm.diffuseTexture = this.getTexture(url)
+        if (oldShadowTex && oldShadowTex !== sm.diffuseTexture) oldShadowTex.dispose()
       }
     } else {
       const spritePath = resolveSpritePath(basePath, isFront)
