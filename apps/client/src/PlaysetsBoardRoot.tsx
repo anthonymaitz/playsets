@@ -6,14 +6,13 @@ import { MeshBuilder, StandardMaterial, Color3, Vector3 } from '@babylonjs/core'
 import { createScene } from './babylon/scene'
 import { createGrid, worldToCell } from './babylon/grid'
 import { BuildingManager } from './babylon/buildings'
-import type { BuildingTile } from './types'
+import type { BuildingTile, FacingDir, SpriteInstance, WeatherType } from './types'
 import { PropManager } from './babylon/props'
 import { SpriteManager } from './babylon/sprites'
 import { DragController } from './babylon/drag'
 import type { DragCallbacks } from './babylon/drag'
 import { WeatherSystem } from './babylon/weather'
 import { LayerBackgroundManager } from './babylon/layers'
-import type { WeatherType } from './types'
 import { BuilderRoot } from './builder/BuilderRoot'
 
 // Local SceneToken — structurally matches shared-types SceneToken
@@ -70,12 +69,20 @@ interface Props {
   highlights?: HighlightCell[]
 }
 
-const ENTITY_COLORS: Record<string, Color3> = {
-  player_me: new Color3(1.0, 0.60, 0.0),
-  player:    new Color3(0.29, 0.50, 0.76),
-  npc:       new Color3(0.29, 0.50, 0.76),
-  enemy:     new Color3(0.88, 0.33, 0.33),
-  door:      new Color3(0.30, 0.69, 0.31),
+// Colored SVG billboard per entity type — same visual language as the builder token palette
+const ENTITY_SPRITE_COLORS: Record<string, string> = {
+  player_me: '#e07020',
+  player:    '#4a7fc1',
+  npc:       '#2d9a5a',
+  enemy:     '#e05555',
+  door:      '#cc8844',
+}
+
+function entityDataUri(typeKey: string): string {
+  const color = ENTITY_SPRITE_COLORS[typeKey] ?? '#4488cc'
+  return `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="96"><rect width="64" height="96" rx="8" fill="${color}"/></svg>`,
+  )}`
 }
 
 function sceneBuildings(sceneData: SceneData): BuildingTile[] {
@@ -92,41 +99,56 @@ export function PlaysetsBoardRoot(props: Props) {
   let bjsCamera: ArcRotateCamera | null = null
   let buildingManager: BuildingManager | null = null
   let weatherSystem: WeatherSystem | null = null
-  const entityMeshes = new Map<string, Mesh>()
+  let exploreSpriteManager: SpriteManager | null = null
+  const trackedEntityIds = new Set<string>()
   const highlightMeshes: Mesh[] = []
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
-  let ghostMesh: Mesh | null = null
 
   function syncEntities(entities: EntityData[]) {
-    if (!bjsScene) return
+    const sm = exploreSpriteManager
+    if (!sm) return
+
     const seen = new Set<string>()
     for (const e of entities) {
       seen.add(e.id)
-      let mesh = entityMeshes.get(e.id)
-      if (!mesh) {
-        mesh = MeshBuilder.CreateCylinder(
-          `entity-${e.id}`,
-          { diameter: 0.6, height: 0.7, tessellation: 12 },
-          bjsScene,
-        )
-        const mat = new StandardMaterial(`emat-${e.id}`, bjsScene)
-        const colorKey = e.type === 'player' && e.isMe ? 'player_me' : e.type
-        mat.diffuseColor = ENTITY_COLORS[colorKey] ?? ENTITY_COLORS.npc
-        if (e.isGhost) mat.alpha = 0.35
-        mesh.material = mat
-        mesh.renderingGroupId = 6
-        mesh.metadata = { entityId: e.id, draggable: e.type === 'player' && e.isMe }
-        entityMeshes.set(e.id, mesh)
+      const typeKey = e.type === 'player' && e.isMe ? 'player_me' : e.type
+      const facing = (e.direction ?? 's') as FacingDir
+      // Doors don't face a direction; all other entity types get a direction indicator
+      const wantsIndicator = e.type !== 'door'
+
+      if (!sm.getMesh(e.id)) {
+        const instance: SpriteInstance = {
+          instanceId: e.id,
+          // spriteId prefix 'tokens/' triggers hasDirections in SpriteManager.place()
+          spriteId: wantsIndicator ? 'tokens/entity' : 'entity',
+          col: e.x,
+          row: e.y,
+          placedBy: 'system',
+          facing,
+          // definitionId also enables hasDirections — belt-and-suspenders for non-tokens/ ids
+          definitionId: wantsIndicator ? e.type : undefined,
+        }
+        sm.place(instance, entityDataUri(typeKey))
+        const mesh = sm.getMesh(e.id)
+        if (mesh) {
+          // Only the local player's token is draggable; override SpriteManager's default
+          mesh.metadata.draggable = e.type === 'player' && !!e.isMe
+          if (e.isGhost) mesh.visibility = 0.35
+        }
+        trackedEntityIds.add(e.id)
+      } else {
+        sm.move(e.id, e.x, e.y)
+        if (wantsIndicator) sm.setFacing(e.id, facing)
       }
-      mesh.position = new Vector3(e.x + 0.5, 0.45, e.y + 0.5)
-      // Rotate to face direction (isometric: Y is Z in world space)
-      const dirAngles: Record<string, number> = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 }
-      mesh.rotation.y = dirAngles[e.direction ?? 's'] ?? 0
     }
-    for (const [id, mesh] of entityMeshes) {
-      if (!seen.has(id)) { mesh.material?.dispose(); mesh.dispose(); entityMeshes.delete(id) }
+
+    for (const id of trackedEntityIds) {
+      if (!seen.has(id)) {
+        sm.remove(id)
+        trackedEntityIds.delete(id)
+      }
     }
   }
 
@@ -169,11 +191,9 @@ export function PlaysetsBoardRoot(props: Props) {
       bjsCamera = ctx.camera
       const ground = createGrid(bjsScene)
 
-      // Always use BuildingManager for proper isometric tile rendering
       buildingManager = new BuildingManager(bjsScene)
       buildingManager.loadSnapshot(sceneBuildings(props.scene))
 
-      // Weather applies to both modes
       weatherSystem = new WeatherSystem(bjsScene, ground, ctx.ambientLight, bjsCamera!)
       weatherSystem.setWeather((props.scene.weather ?? 'sunny') as WeatherType)
 
@@ -218,12 +238,14 @@ export function PlaysetsBoardRoot(props: Props) {
           lm.dispose()
         })
       } else {
-        // Explore mode: entity cylinders for players/NPCs
+        // Explore / combat mode — SpriteManager handles all entity rendering
+        exploreSpriteManager = new SpriteManager(bjsScene, bjsCamera ?? undefined)
         syncEntities(props.entities)
 
         onCleanup(() => {
-          for (const m of entityMeshes.values()) { m.material?.dispose(); m.dispose() }
-          entityMeshes.clear()
+          exploreSpriteManager?.clear()
+          exploreSpriteManager = null
+          trackedEntityIds.clear()
           for (const m of highlightMeshes) { m.material?.dispose(); m.dispose() }
           highlightMeshes.length = 0
           buildingManager?.dispose()
@@ -233,7 +255,7 @@ export function PlaysetsBoardRoot(props: Props) {
         })
       }
 
-      // General pointer observer — fires AFTER DragController's observer (added above)
+      // General pointer observer — fires AFTER DragController's observer (added above in build mode)
       bjsScene.onPointerObservable.add((info) => {
         if (props.mode === 'build') {
           if (info.type === PointerEventTypes.POINTERUP) {
@@ -242,7 +264,7 @@ export function PlaysetsBoardRoot(props: Props) {
           return
         }
 
-        // Explore mode pointer logic
+        // Explore / combat pointer logic
         if (info.type === PointerEventTypes.POINTERUP) {
           if (dragging) {
             bjsCamera?.attachControl(true, false, 0)
@@ -251,17 +273,13 @@ export function PlaysetsBoardRoot(props: Props) {
               const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
               props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
             }
-            // Dispose ghost
-            if (ghostMesh) {
-              ghostMesh.material?.dispose()
-              ghostMesh.dispose()
-              ghostMesh = null
-            }
+            const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
+            if (mesh) mesh.visibility = 1
+            exploreSpriteManager?.hidePlacementGhost()
             dragging = null
           } else {
-            // Prioritize entity mesh pick so clicking an NPC/door cylinder fires the
-            // correct cell even when the isometric ray misses the ground cell beneath it.
-            const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.entityId))
+            // Prioritize sprite pick — the billboard plane is the correct hit target for entity clicks
+            const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
             if (entityPick?.hit && entityPick.pickedMesh) {
               const pos = entityPick.pickedMesh.position
               const { col, row } = worldToCell(pos.x, pos.z)
@@ -276,44 +294,34 @@ export function PlaysetsBoardRoot(props: Props) {
           }
           return
         }
+
         if (info.type === PointerEventTypes.POINTERDOWN) {
           const pickResult = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.draggable))
-          if (pickResult?.pickedMesh?.metadata?.entityId) {
-            const entityId = pickResult.pickedMesh.metadata.entityId as string
-            const mesh = entityMeshes.get(entityId)
+          if (pickResult?.pickedMesh?.metadata?.instanceId) {
+            const entityId = pickResult.pickedMesh.metadata.instanceId as string
+            const mesh = exploreSpriteManager?.getMesh(entityId)
             if (mesh) {
               const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
               dragging = { entityId, lastCol: col, lastRow: row }
               bjsCamera?.detachControl()
-
-              // Create translucent ghost at the token's current position
-              ghostMesh = MeshBuilder.CreateCylinder(
-                `ghost-${entityId}`,
-                { diameter: 0.6, height: 0.7, tessellation: 12 },
-                bjsScene!,
-              )
-              ghostMesh.position = mesh.position.clone()
-              ghostMesh.isPickable = false
-              ghostMesh.renderingGroupId = 6
-              const ghostMat = new StandardMaterial(`ghostmat-${entityId}`, bjsScene!)
-              ghostMat.diffuseColor = (mesh.material as StandardMaterial).diffuseColor.clone()
-              ghostMat.alpha = 0.45
-              ghostMesh.material = ghostMat
+              mesh.visibility = 0.4
+              const basePath = (mesh.metadata?.basePath as string) ?? ''
+              exploreSpriteManager?.showPlacementGhost('tokens/ghost', basePath, col, row)
             }
           }
           return
         }
+
         if (info.type === PointerEventTypes.POINTERMOVE && dragging) {
           const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
           if (pick?.hit && pick.pickedPoint) {
-            // Move ghost to world-space cursor position
-            if (ghostMesh) {
-              ghostMesh.position = new Vector3(pick.pickedPoint.x, 0.45, pick.pickedPoint.z)
-            }
             const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
             if (col !== dragging.lastCol || row !== dragging.lastRow) {
               dragging.lastCol = col
               dragging.lastRow = row
+              const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
+              const basePath = (mesh?.metadata?.basePath as string) ?? ''
+              exploreSpriteManager?.showPlacementGhost('tokens/ghost', basePath, col, row)
               props.host.dispatchEvent(new CustomEvent('tokendrag', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
             }
           }
@@ -327,7 +335,6 @@ export function PlaysetsBoardRoot(props: Props) {
     }
   })
 
-  // Reactive scene update — replace buildings + weather when scene data changes (explore mode)
   createEffect(on(() => props.scene, (sceneData) => {
     if (props.mode !== 'build') {
       if (buildingManager) buildingManager.loadSnapshot(sceneBuildings(sceneData))
