@@ -4,7 +4,7 @@ import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera, Mesh } from '@babylonjs/core'
 import { MeshBuilder, StandardMaterial, Color3, Vector3, Matrix } from '@babylonjs/core'
 import { createScene } from './babylon/scene'
-import { createGrid, worldToCell } from './babylon/grid'
+import { createGrid, worldToCell, cellToWorld } from './babylon/grid'
 import { BuildingManager } from './babylon/buildings'
 import type { BuildingTile, FacingDir, SpriteInstance, WeatherType } from './types'
 import { PropManager } from './babylon/props'
@@ -130,11 +130,11 @@ export function PlaysetsBoardRoot(props: Props) {
   const highlightMeshes: Mesh[] = []
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
+  let cameraInitialized = false
   let dragging: { entityId: string; startCol: number; startRow: number; lastCol: number; lastRow: number; moved: boolean } | null = null
   type DirPickerState = { instanceId: string; x: number; y: number; cameraAlpha: number }
   const [dirPickerState, setDirPickerState] = createSignal<DirPickerState | null>(null)
   const [tokenMenuId, setTokenMenuId] = createSignal<string | null>(null)
-  const [debugLog, setDebugLog] = createSignal<string>('waiting for tap…')
   // The click event fires right after POINTERUP on the canvas — skip it so it doesn't immediately dismiss the overlays we just opened
   let skipNextDismissClick = false
 
@@ -214,6 +214,16 @@ export function PlaysetsBoardRoot(props: Props) {
       if (!seen.has(id)) {
         sm.remove(id)
         trackedEntityIds.delete(id)
+      }
+    }
+
+    // On first entity sync, pan camera to show the player (or board center)
+    if (!cameraInitialized && bjsCamera) {
+      const me = entities.find(e => e.isMe)
+      if (me) {
+        const { x, z } = cellToWorld(me.x, me.y)
+        bjsCamera.target = new Vector3(x, 0, z)
+        cameraInitialized = true
       }
     }
   }
@@ -343,8 +353,6 @@ export function PlaysetsBoardRoot(props: Props) {
         // Explore / combat pointer logic
         if (info.type === PointerEventTypes.POINTERUP) {
           if (dragging) {
-            console.log('[playsets-board] POINTERUP dragging entityId:', dragging.entityId, 'moved:', dragging.moved)
-            setDebugLog(`UP: dragging=${dragging.entityId} moved=${dragging.moved}`)
             bjsCamera?.attachControl(true, false, 0)
             if (dragging.moved) {
               const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
@@ -355,11 +363,9 @@ export function PlaysetsBoardRoot(props: Props) {
             }
             // Show dir picker + token menu whether it was a drag or a tap — own token always gets overlays
             const pos = getEntityScreenPos(dragging.entityId)
-            console.log('[playsets-board] getEntityScreenPos:', pos, 'for', dragging.entityId)
             skipNextDismissClick = true  // the click event from this same tap must not dismiss the overlays we're about to show
             if (pos) setDirPickerState({ instanceId: dragging.entityId, ...pos, cameraAlpha: bjsCamera?.alpha ?? 0 })
             setTokenMenuId(dragging.entityId)
-            setDebugLog(`tokenMenu set: ${dragging.entityId} pos=${JSON.stringify(pos)}`)
             const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
             if (mesh) mesh.visibility = 1
             exploreSpriteManager?.hidePlacementGhost()
@@ -372,42 +378,54 @@ export function PlaysetsBoardRoot(props: Props) {
               props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: entityId, x: col, y: row } }))
             }
           } else {
-            // Non-draggable entities (NPCs, enemies, doors) — dispatch events only
-            const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
-            if (entityPick?.hit && entityPick.pickedMesh) {
-              const instanceId = entityPick.pickedMesh.metadata?.instanceId as string
-              const pos = entityPick.pickedMesh.position
-              const { col, row } = worldToCell(pos.x, pos.z)
-              props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: instanceId, x: col, y: row } }))
+            // Billboard sprite meshes can't be picked reliably; use ground-pick + cell-lookup instead
+            const groundPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+            if (groundPick?.hit && groundPick.pickedPoint && exploreSpriteManager) {
+              const { col, row } = worldToCell(groundPick.pickedPoint.x, groundPick.pickedPoint.z)
+              const sm = exploreSpriteManager as any
+              let hitId: string | null = null
+              for (const [id, mesh] of sm.meshes.entries() as Iterable<[string, import('@babylonjs/core').Mesh]>) {
+                if (!mesh.metadata?.instanceId) continue
+                const { col: ec, row: er } = worldToCell(mesh.position.x, mesh.position.z)
+                if (ec === col && er === row) { hitId = id; break }
+              }
+              if (hitId) {
+                props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: hitId, x: col, y: row } }))
+              } else {
+                dismissOverlays()
+              }
               props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
             } else {
               dismissOverlays()
-              const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
-              if (pick?.hit && pick.pickedPoint) {
-                const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-                props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
-              }
             }
           }
           return
         }
 
         if (info.type === PointerEventTypes.POINTERDOWN) {
-          const pickResult = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.draggable))
-          const hitDraggable = !!(pickResult?.pickedMesh?.metadata?.draggable)
-          const hitAny = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
-          setDebugLog(`DOWN: draggable=${hitDraggable} anyEntity=${!!(hitAny?.pickedMesh?.metadata?.instanceId)} mesh=${pickResult?.pickedMesh?.name ?? 'none'}`)
-          console.log('[playsets-board] POINTERDOWN draggable:', hitDraggable, 'mesh:', pickResult?.pickedMesh?.name, 'metadata:', JSON.stringify(pickResult?.pickedMesh?.metadata))
-          if (pickResult?.pickedMesh?.metadata?.instanceId) {
-            const entityId = pickResult.pickedMesh.metadata.instanceId as string
-            const mesh = exploreSpriteManager?.getMesh(entityId)
-            if (mesh) {
-              const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
-              dragging = { entityId, startCol: col, startRow: row, lastCol: col, lastRow: row, moved: false }
-              bjsCamera?.detachControl()
-              mesh.visibility = 0.4
-              const basePath = (mesh.metadata?.basePath as string) ?? ''
-              exploreSpriteManager?.showPlacementGhost('tokens/ghost', basePath, col, row)
+          // Billboard sprite meshes cannot be picked reliably via scene.pick() due to
+          // world-matrix billboard transform not being applied during BabylonJS ray tests.
+          // Instead: pick the flat ground plane (always accurate), get the cell, then look
+          // up which entity occupies that cell via the SpriteManager's position map.
+          const groundPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+          if (groundPick?.hit && groundPick.pickedPoint && exploreSpriteManager) {
+            const { col, row } = worldToCell(groundPick.pickedPoint.x, groundPick.pickedPoint.z)
+            const sm = exploreSpriteManager as any
+            let entityId: string | null = null
+            for (const [id, mesh] of sm.meshes.entries() as Iterable<[string, import('@babylonjs/core').Mesh]>) {
+              if (!mesh.metadata?.draggable) continue
+              const { col: ec, row: er } = worldToCell(mesh.position.x, mesh.position.z)
+              if (ec === col && er === row) { entityId = id; break }
+            }
+            if (entityId) {
+              const mesh = exploreSpriteManager.getMesh(entityId)
+              if (mesh) {
+                dragging = { entityId, startCol: col, startRow: row, lastCol: col, lastRow: row, moved: false }
+                bjsCamera?.detachControl()
+                mesh.visibility = 0.4
+                const basePath = (mesh.metadata?.basePath as string) ?? ''
+                exploreSpriteManager.showPlacementGhost('tokens/ghost', basePath, col, row)
+              }
             }
           }
           return
