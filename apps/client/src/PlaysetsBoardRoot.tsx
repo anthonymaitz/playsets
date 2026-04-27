@@ -196,7 +196,7 @@ export function PlaysetsBoardRoot(props: Props) {
         bjsScene,
       )
       mesh.position = new Vector3(cell.x + 0.5, 0.01, cell.y + 0.5)
-      mesh.renderingGroupId = 6
+      mesh.renderingGroupId = 4
       mesh.isPickable = false
       const mat = new StandardMaterial(`hlmat-${cell.x}-${cell.y}`, bjsScene)
       const [r, g, b] = colorMap[cell.kind] ?? [1, 1, 1]
