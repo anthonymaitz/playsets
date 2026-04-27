@@ -120,7 +120,7 @@ export function PlaysetsBoardRoot(props: Props) {
   const highlightMeshes: Mesh[] = []
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
-  let dragging: { entityId: string; lastCol: number; lastRow: number } | null = null
+  let dragging: { entityId: string; lastCol: number; lastRow: number; moved: boolean } | null = null
 
   function syncEntities(entities: EntityData[]) {
     const sm = exploreSpriteManager
@@ -134,6 +134,13 @@ export function PlaysetsBoardRoot(props: Props) {
       // Doors don't face a direction; all other entity types get a direction indicator
       const wantsIndicator = e.type !== 'door'
 
+      const basePath = e.spriteId ?? entityDataUri(typeKey)
+      const existingMesh = sm.getMesh(e.id)
+      if (existingMesh && existingMesh.metadata?.basePath !== basePath) {
+        // Sprite changed (e.g. heroState arrived after initial placement) — re-place
+        sm.remove(e.id)
+        trackedEntityIds.delete(e.id)
+      }
       if (!sm.getMesh(e.id)) {
         const instance: SpriteInstance = {
           instanceId: e.id,
@@ -146,7 +153,6 @@ export function PlaysetsBoardRoot(props: Props) {
           // definitionId also enables hasDirections — belt-and-suspenders for non-tokens/ ids
           definitionId: wantsIndicator ? e.type : undefined,
         }
-        const basePath = e.spriteId ?? entityDataUri(typeKey)
         sm.place(instance, basePath)
         const mesh = sm.getMesh(e.id)
         if (mesh) {
@@ -285,10 +291,10 @@ export function PlaysetsBoardRoot(props: Props) {
         if (info.type === PointerEventTypes.POINTERUP) {
           if (dragging) {
             bjsCamera?.attachControl(true, false, 0)
-            const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
-            if (pick?.hit && pick.pickedPoint) {
-              const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-              if (col !== dragging.lastCol || row !== dragging.lastRow) {
+            if (dragging.moved) {
+              const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
+              if (pick?.hit && pick.pickedPoint) {
+                const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
                 props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
               }
             }
@@ -321,7 +327,7 @@ export function PlaysetsBoardRoot(props: Props) {
             const mesh = exploreSpriteManager?.getMesh(entityId)
             if (mesh) {
               const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
-              dragging = { entityId, lastCol: col, lastRow: row }
+              dragging = { entityId, lastCol: col, lastRow: row, moved: false }
               bjsCamera?.detachControl()
               mesh.visibility = 0.4
               const basePath = (mesh.metadata?.basePath as string) ?? ''
@@ -338,6 +344,7 @@ export function PlaysetsBoardRoot(props: Props) {
             if (col !== dragging.lastCol || row !== dragging.lastRow) {
               dragging.lastCol = col
               dragging.lastRow = row
+              dragging.moved = true
               const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
               const basePath = (mesh?.metadata?.basePath as string) ?? ''
               exploreSpriteManager?.showPlacementGhost('tokens/ghost', basePath, col, row)

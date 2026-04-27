@@ -47,7 +47,7 @@ export class SpriteManager {
   private ghost: { mesh: Mesh; mat: StandardMaterial; spriteId: string } | null = null
   private animationHandlers = new Map<string, () => void>()
   private shadowGen: ShadowGenerator | null = null
-  private shadowsEnabled = false
+  private shadowsEnabled = true
   private torchLights = new Map<string, { light: PointLight; cleanup: () => void }>()
   private lastSnapIndex = -1
 
