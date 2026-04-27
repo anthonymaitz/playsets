@@ -1,8 +1,8 @@
-import { createEffect, on, onMount, onCleanup, createSignal, Show } from 'solid-js'
+import { createEffect, on, onMount, onCleanup, createSignal, Show, For } from 'solid-js'
 import type { HighlightCell } from './board-element'
 import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera, Mesh } from '@babylonjs/core'
-import { MeshBuilder, StandardMaterial, Color3, Vector3 } from '@babylonjs/core'
+import { MeshBuilder, StandardMaterial, Color3, Vector3, Matrix } from '@babylonjs/core'
 import { createScene } from './babylon/scene'
 import { createGrid, worldToCell } from './babylon/grid'
 import { BuildingManager } from './babylon/buildings'
@@ -128,6 +128,34 @@ export function PlaysetsBoardRoot(props: Props) {
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; startCol: number; startRow: number; lastCol: number; lastRow: number; moved: boolean } | null = null
+  const [ctxMenuId, setCtxMenuId] = createSignal<string | null>(null)
+  const [ctxMenuPos, setCtxMenuPos] = createSignal<{ x: number; y: number } | null>(null)
+
+  function getExploreMenuPos(instanceId: string): { x: number; y: number } | null {
+    if (!bjsScene || !bjsCamera) return null
+    const mesh = exploreSpriteManager?.getMesh(instanceId)
+    if (!mesh) return null
+    const engine = bjsScene.getEngine()
+    const canvas = engine.getRenderingCanvas()
+    if (!canvas) return null
+    const viewport = bjsCamera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
+    const transform = bjsScene.getTransformMatrix()
+    const canvasBounds = canvas.getBoundingClientRect()
+    const scaleX = canvasBounds.width / engine.getRenderWidth()
+    const scaleY = canvasBounds.height / engine.getRenderHeight()
+    const worldTop = new Vector3(mesh.position.x, 1.6, mesh.position.z)
+    const s = Vector3.Project(worldTop, Matrix.Identity(), transform, viewport)
+    return { x: s.x * scaleX + canvasBounds.left, y: s.y * scaleY + canvasBounds.top }
+  }
+
+  function dismissExploreMenu() { setCtxMenuId(null); setCtxMenuPos(null) }
+
+  function handleExploreContextFacing(dir: FacingDir) {
+    const id = ctxMenuId()
+    if (!id || !exploreSpriteManager) return
+    exploreSpriteManager.setFacing(id, dir)
+    props.host.dispatchEvent(new CustomEvent('tokenface', { bubbles: true, detail: { id, direction: dir } }))
+  }
 
   function syncEntities(entities: EntityData[]) {
     const sm = exploreSpriteManager
@@ -274,7 +302,14 @@ export function PlaysetsBoardRoot(props: Props) {
         exploreSpriteManager = new SpriteManager(bjsScene, bjsCamera ?? undefined)
         syncEntities(props.entities)
 
+        const onDocClick = (e: MouseEvent) => {
+          const menu = document.getElementById('explore-ctx-menu')
+          if (menu && !menu.contains(e.target as Node)) dismissExploreMenu()
+        }
+        window.addEventListener('click', onDocClick, true)
+
         onCleanup(() => {
+          window.removeEventListener('click', onDocClick, true)
           exploreSpriteManager?.clear()
           exploreSpriteManager = null
           trackedEntityIds.clear()
@@ -318,10 +353,14 @@ export function PlaysetsBoardRoot(props: Props) {
               const instanceId = entityPick.pickedMesh.metadata?.instanceId as string
               const pos = entityPick.pickedMesh.position
               const { col, row } = worldToCell(pos.x, pos.z)
-              // spriteclick: let host show context menu (facing, stats, etc.)
+              // Show in-canvas facing context menu
+              const menuPos = getExploreMenuPos(instanceId)
+              if (menuPos) { setCtxMenuId(instanceId); setCtxMenuPos(menuPos) }
+              // spriteclick: let host show additional game-side UI (stats, abilities, etc.)
               props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: instanceId, x: col, y: row } }))
               props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
             } else {
+              dismissExploreMenu()
               const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
               if (pick?.hit && pick.pickedPoint) {
                 const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
@@ -398,6 +437,42 @@ export function PlaysetsBoardRoot(props: Props) {
           // @ts-ignore
           <BuilderRoot host={props.host} scene={props.scene} managers={managers()} />
         )}
+      </Show>
+
+      {/* Explore-mode token context menu — facing arrows */}
+      {/* @ts-ignore */}
+      <Show when={ctxMenuId() !== null && ctxMenuPos() !== null}>
+        {/* @ts-ignore */}
+        {() => {
+          const pos = ctxMenuPos()!
+          const dirs: FacingDir[] = ['n', 'e', 's', 'w']
+          const labels: Record<FacingDir, string> = { n: 'N', e: 'E', s: 'S', w: 'W' }
+          return (
+            // @ts-ignore
+            <div
+              id="explore-ctx-menu"
+              style={`position:fixed;pointer-events:auto;z-index:60;left:${pos.x}px;top:${pos.y}px;transform:translate(-50%,-100%) translateY(-8px);background:rgba(10,14,10,0.94);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px 10px;box-shadow:0 4px 18px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:6px;min-width:100px;font-family:monospace;`}
+            >
+              <div style="color:rgba(200,137,58,0.9);font-size:10px;font-weight:700;text-align:center;">Facing</div>
+              {/* @ts-ignore */}
+              <div style="display:flex;justify-content:center;gap:4px;">
+                {/* @ts-ignore */}
+                <For each={dirs}>
+                  {/* @ts-ignore */}
+                  {(dir) => (
+                    // @ts-ignore
+                    <button
+                      onClick={() => { handleExploreContextFacing(dir); dismissExploreMenu() }}
+                      style={`width:28px;height:28px;border-radius:5px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:11px;font-weight:700;color:#fff;background:rgba(40,50,40,0.9);`}
+                    >
+                      {labels[dir]}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+          )
+        }}
       </Show>
     </>
   )
