@@ -134,6 +134,9 @@ export function PlaysetsBoardRoot(props: Props) {
   type DirPickerState = { instanceId: string; x: number; y: number; cameraAlpha: number }
   const [dirPickerState, setDirPickerState] = createSignal<DirPickerState | null>(null)
   const [tokenMenuId, setTokenMenuId] = createSignal<string | null>(null)
+  const [debugLog, setDebugLog] = createSignal<string>('waiting for tap…')
+  // The click event fires right after POINTERUP on the canvas — skip it so it doesn't immediately dismiss the overlays we just opened
+  let skipNextDismissClick = false
 
   function getEntityScreenPos(instanceId: string): { x: number; y: number } | null {
     if (!bjsScene || !bjsCamera) return null
@@ -308,6 +311,7 @@ export function PlaysetsBoardRoot(props: Props) {
         syncEntities(props.entities)
 
         const onDocClick = (e: MouseEvent) => {
+          if (skipNextDismissClick) { skipNextDismissClick = false; return }
           const hasOverlay = document.getElementById('explore-dir-picker') || document.getElementById('explore-token-menu')
           if (hasOverlay && !(e.target as Element)?.closest?.('#explore-dir-picker, #explore-token-menu')) dismissOverlays()
         }
@@ -339,6 +343,8 @@ export function PlaysetsBoardRoot(props: Props) {
         // Explore / combat pointer logic
         if (info.type === PointerEventTypes.POINTERUP) {
           if (dragging) {
+            console.log('[playsets-board] POINTERUP dragging entityId:', dragging.entityId, 'moved:', dragging.moved)
+            setDebugLog(`UP: dragging=${dragging.entityId} moved=${dragging.moved}`)
             bjsCamera?.attachControl(true, false, 0)
             if (dragging.moved) {
               const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
@@ -349,8 +355,11 @@ export function PlaysetsBoardRoot(props: Props) {
             }
             // Show dir picker + token menu whether it was a drag or a tap — own token always gets overlays
             const pos = getEntityScreenPos(dragging.entityId)
+            console.log('[playsets-board] getEntityScreenPos:', pos, 'for', dragging.entityId)
+            skipNextDismissClick = true  // the click event from this same tap must not dismiss the overlays we're about to show
             if (pos) setDirPickerState({ instanceId: dragging.entityId, ...pos, cameraAlpha: bjsCamera?.alpha ?? 0 })
             setTokenMenuId(dragging.entityId)
+            setDebugLog(`tokenMenu set: ${dragging.entityId} pos=${JSON.stringify(pos)}`)
             const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
             if (mesh) mesh.visibility = 1
             exploreSpriteManager?.hidePlacementGhost()
@@ -385,6 +394,10 @@ export function PlaysetsBoardRoot(props: Props) {
 
         if (info.type === PointerEventTypes.POINTERDOWN) {
           const pickResult = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.draggable))
+          const hitDraggable = !!(pickResult?.pickedMesh?.metadata?.draggable)
+          const hitAny = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
+          setDebugLog(`DOWN: draggable=${hitDraggable} anyEntity=${!!(hitAny?.pickedMesh?.metadata?.instanceId)} mesh=${pickResult?.pickedMesh?.name ?? 'none'}`)
+          console.log('[playsets-board] POINTERDOWN draggable:', hitDraggable, 'mesh:', pickResult?.pickedMesh?.name, 'metadata:', JSON.stringify(pickResult?.pickedMesh?.metadata))
           if (pickResult?.pickedMesh?.metadata?.instanceId) {
             const entityId = pickResult.pickedMesh.metadata.instanceId as string
             const mesh = exploreSpriteManager?.getMesh(entityId)
