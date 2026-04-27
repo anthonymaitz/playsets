@@ -247,8 +247,8 @@ export function PlaysetsBoardRoot(props: Props) {
       const ctx = createScene(props.canvas)
       bjsScene = ctx.scene
       bjsCamera = ctx.camera
-      // Clear depth before rendering group 5 (sprites) so wall/building geometry (group 0) can't occlude tokens
-      bjsScene.setRenderingAutoClearDepthStencil(5, true)
+      // Sprites are in group 6, buildings/ground in group 5. Clear depth before group 6 so walls can't occlude tokens.
+      bjsScene.setRenderingAutoClearDepthStencil(6, true)
       const ground = createGrid(bjsScene)
 
       buildingManager = new BuildingManager(bjsScene)

@@ -26,11 +26,26 @@ const NPC_COLOR_MAP: Record<string, string> = {
   doorkeeper: '#6040c0',
 }
 
+const _tokenDataUriCache = new Map<string, string>()
 function tokenDataUri(type: string, role?: string): string {
+  const key = `${type}:${role ?? ''}`
+  const cached = _tokenDataUriCache.get(key)
+  if (cached) return cached
   const color = type === 'door' ? '#cc4444' : (NPC_COLOR_MAP[role ?? ''] ?? '#4488cc')
-  return `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="96"><rect width="64" height="96" rx="8" fill="${color}"/></svg>`,
-  )}`
+  const canvas = document.createElement('canvas')
+  canvas.width = 64; canvas.height = 96
+  const ctx = canvas.getContext('2d')!
+  const r = 8, w = 64, h = 96
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.moveTo(r, 0); ctx.lineTo(w - r, 0); ctx.arcTo(w, 0, w, r, r)
+  ctx.lineTo(w, h - r); ctx.arcTo(w, h, w - r, h, r)
+  ctx.lineTo(r, h); ctx.arcTo(0, h, 0, h - r, r)
+  ctx.lineTo(0, r); ctx.arcTo(0, 0, r, 0, r)
+  ctx.closePath(); ctx.fill()
+  const uri = canvas.toDataURL('image/png')
+  _tokenDataUriCache.set(key, uri)
+  return uri
 }
 
 function tokenColor(tokenId: string): string {

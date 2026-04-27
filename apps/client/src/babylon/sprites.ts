@@ -111,7 +111,8 @@ export class SpriteManager {
     )
     plane.position = new Vector3(x, h / 2 - (instance.zOrder ?? 0) * 0.03, z)
     plane.billboardMode = Mesh.BILLBOARDMODE_Y
-    plane.renderingGroupId = instance.layerIndex ?? 5
+    const groupId = (instance.layerIndex ?? 5) + 1
+    plane.renderingGroupId = groupId
     if (initialMirrored) plane.scaling.x = -1
 
     const mat = new StandardMaterial(`mat-${instance.instanceId}`, this.scene)
@@ -136,14 +137,14 @@ export class SpriteManager {
     this.meshes.set(instance.instanceId, plane)
     if (this.shadowGen) this.shadowGen.addShadowCaster(plane)
 
-    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath, instance.layerIndex ?? 5)
+    if (!isTerrain) this._createTokenShadow(instance.instanceId, x, z, spritePath, groupId)
 
-    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing)
+    if (hasDir) this.upsertIndicator(instance.instanceId, x, z, facing, 0, groupId)
 
     if (instance.hidden) this.setHidden(instance.instanceId, true)
   }
 
-  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string, layerIndex = 5): void {
+  private _createTokenShadow(instanceId: string, x: number, z: number, spritePath: string, groupId = 6): void {
     const sp = MeshBuilder.CreatePlane(`shadow-${instanceId}`, {
       width: CELL_SIZE * 0.9,
       height: SHADOW_LENGTH,
@@ -151,7 +152,7 @@ export class SpriteManager {
     sp.rotation.x = SHADOW_ROT_X
     sp.rotation.y = SHADOW_ROT_Y
     sp.position = new Vector3(x + SHADOW_OFFSET_X, 0.01, z + SHADOW_OFFSET_Z)
-    sp.renderingGroupId = layerIndex
+    sp.renderingGroupId = groupId
     const sm = new StandardMaterial(`shadow-mat-${instanceId}`, this.scene)
     sm.diffuseTexture = this.getTexture(spritePath)
     sm.useAlphaFromDiffuseTexture = true
@@ -166,12 +167,13 @@ export class SpriteManager {
     this.tokenShadows.set(instanceId, sp)
   }
 
-  private upsertIndicator(instanceId: string, x: number, z: number, facing: FacingDir, layerY = 0): void {
+  private upsertIndicator(instanceId: string, x: number, z: number, facing: FacingDir, layerY = 0, groupId = 6): void {
     let ind = this.indicators.get(instanceId)
     if (!ind) {
       ind = MeshBuilder.CreateDisc(`dir-${instanceId}`, { radius: 0.22, tessellation: 3 }, this.scene)
       ind.rotation.x = -Math.PI / 2
       ind.position = new Vector3(x, layerY + 0.02, z)
+      ind.renderingGroupId = groupId
       const mat = new StandardMaterial(`dir-mat-${instanceId}`, this.scene)
       mat.diffuseColor = new Color3(1, 0.85, 0.1)
       mat.emissiveColor = new Color3(0.6, 0.5, 0)
@@ -205,7 +207,12 @@ export class SpriteManager {
     const mesh = this.meshes.get(instanceId)
     if (!mesh) return
     mesh.metadata.layerIndex = layerIndex
-    mesh.renderingGroupId = layerIndex
+    const groupId = layerIndex + 1
+    mesh.renderingGroupId = groupId
+    const shadow = this.tokenShadows.get(instanceId)
+    if (shadow) shadow.renderingGroupId = groupId
+    const ind = this.indicators.get(instanceId)
+    if (ind) ind.renderingGroupId = groupId
   }
 
   setLayerVisibility(layerIndex: number, visible: boolean): void {
