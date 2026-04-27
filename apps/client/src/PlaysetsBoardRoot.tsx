@@ -47,6 +47,7 @@ export interface EntityData {
   isGhost?: boolean
   label?: string
   direction?: string
+  spriteId?: string
 }
 
 export interface BuildManagers {
@@ -70,7 +71,7 @@ interface Props {
   highlights?: HighlightCell[]
 }
 
-// Colored SVG billboard per entity type — same visual language as the builder token palette
+// Colored token fallback — PNG canvas data-URI (SVG data-URIs don't decode alpha reliably in BabylonJS)
 const ENTITY_SPRITE_COLORS: Record<string, string> = {
   player_me: '#e07020',
   player:    '#4a7fc1',
@@ -78,12 +79,26 @@ const ENTITY_SPRITE_COLORS: Record<string, string> = {
   enemy:     '#e05555',
   door:      '#cc8844',
 }
+const _entityDataUriCache = new Map<string, string>()
 
 function entityDataUri(typeKey: string): string {
+  const cached = _entityDataUriCache.get(typeKey)
+  if (cached) return cached
   const color = ENTITY_SPRITE_COLORS[typeKey] ?? '#4488cc'
-  return `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="96"><rect width="64" height="96" rx="8" fill="${color}"/></svg>`,
-  )}`
+  const canvas = document.createElement('canvas')
+  canvas.width = 64; canvas.height = 96
+  const ctx = canvas.getContext('2d')!
+  const r = 8, w = 64, h = 96
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.moveTo(r, 0); ctx.lineTo(w - r, 0); ctx.arcTo(w, 0, w, r, r)
+  ctx.lineTo(w, h - r); ctx.arcTo(w, h, w - r, h, r)
+  ctx.lineTo(r, h); ctx.arcTo(0, h, 0, h - r, r)
+  ctx.lineTo(0, r); ctx.arcTo(0, 0, r, 0, r)
+  ctx.closePath(); ctx.fill()
+  const uri = canvas.toDataURL('image/png')
+  _entityDataUriCache.set(typeKey, uri)
+  return uri
 }
 
 function sceneBuildings(sceneData: SceneData): BuildingTile[] {
@@ -131,7 +146,8 @@ export function PlaysetsBoardRoot(props: Props) {
           // definitionId also enables hasDirections — belt-and-suspenders for non-tokens/ ids
           definitionId: wantsIndicator ? e.type : undefined,
         }
-        sm.place(instance, entityDataUri(typeKey))
+        const basePath = e.spriteId ?? entityDataUri(typeKey)
+        sm.place(instance, basePath)
         const mesh = sm.getMesh(e.id)
         if (mesh) {
           // Only the local player's token is draggable; override SpriteManager's default
@@ -272,7 +288,9 @@ export function PlaysetsBoardRoot(props: Props) {
             const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
             if (pick?.hit && pick.pickedPoint) {
               const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-              props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
+              if (col !== dragging.lastCol || row !== dragging.lastRow) {
+                props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
+              }
             }
             const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
             if (mesh) mesh.visibility = 1
