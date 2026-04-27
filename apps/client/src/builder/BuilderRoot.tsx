@@ -9,6 +9,8 @@ import { getPropCategory } from '../babylon/props'
 import { BuilderToolbar } from './BuilderToolbar'
 import type { ToolTab } from './BuilderToolbar'
 import { LayerPanel } from './LayerPanel'
+import { DirectionPickerOverlay } from '../overlays/DirectionPickerOverlay'
+import { TokenLayerMoverOverlay } from '../overlays/TokenLayerMoverOverlay'
 
 interface ScreenCorners {
   nw: { x: number; y: number }
@@ -78,6 +80,7 @@ export function BuilderRoot(props: Props) {
   const [ghostPos, setGhostPos] = createSignal<{ x: number; y: number } | null>(null)
   const [contextMenuId, setContextMenuId] = createSignal<string | null>(null)
   const [contextMenuPos, setContextMenuPos] = createSignal<{ x: number; y: number } | null>(null)
+  const [cameraAlpha, setCameraAlpha] = createSignal(0)
 
   let previewEnd: { col: number; row: number } | null = null
   let draggingCorner: 'nw' | 'ne' | 'sw' | 'se' | null = null
@@ -187,13 +190,14 @@ export function BuilderRoot(props: Props) {
       props.managers.spriteManager.remove(existing.id)
       setTokens(prev => prev.filter(t => t.id !== existing.id))
     }
+    const layer = activeLayerIndex()
     const token: SceneToken = {
       id, type: tokenType as 'npc' | 'door', col, row,
       role: tokenRole as SceneToken['role'], name: tokenRole,
-      direction: 's',
+      direction: 's', layerIndex: layer,
     }
     props.managers.spriteManager.place(
-      { instanceId: id, spriteId: `tokens/${tokenType}`, col, row, placedBy: 'builder', facing: 's' },
+      { instanceId: id, spriteId: `tokens/${tokenType}`, col, row, placedBy: 'builder', facing: 's', layerIndex: layer },
       tokenDataUri(tokenType, tokenRole),
     )
     setTokens(prev => [...prev.filter(t => !(t.col === col && t.row === row)), token])
@@ -299,19 +303,20 @@ export function BuilderRoot(props: Props) {
 
     for (const t of props.scene.tokens ?? []) {
       spriteManager.place(
-        { instanceId: t.id, spriteId: `tokens/${t.type}`, col: t.col, row: t.row, placedBy: 'builder', facing: (t.direction ?? 's') as FacingDir },
+        { instanceId: t.id, spriteId: `tokens/${t.type}`, col: t.col, row: t.row, placedBy: 'builder', facing: (t.direction ?? 's') as FacingDir, layerIndex: t.layerIndex ?? 5 },
         tokenDataUri(t.type, t.role),
       )
     }
     setTokens(props.scene.tokens ?? [])
     weatherSystem.setWeather(weather() as WeatherType)
 
-    // Update screen-space corners every frame while a preview is active
+    // Update screen-space corners and camera alpha every frame
     const renderObserver = bjsScene.onBeforeRenderObservable.add(() => {
       const next = (previewEnd && buildingManager.getPreviewStart())
         ? computeScreenCorners()
         : null
       setScreenCorners(next)
+      setCameraAlpha(props.managers.bjsCamera.alpha)
     })
 
     const isBuildMesh = (m: { name: string }) =>
@@ -494,36 +499,44 @@ export function BuilderRoot(props: Props) {
         />
       )}
 
-      {/* Token context menu */}
+      {/* Token context menu — label + delete only; facing is handled by DirectionPickerOverlay */}
       <Show when={contextMenuId() !== null && contextMenuPos() !== null}>
         {() => {
           const token = () => tokens().find(t => t.id === contextMenuId())
-          const facing = () => (tokens().find(t => t.id === contextMenuId())?.direction as FacingDir) ?? 's'
           const pos = contextMenuPos()!
           const label = () => { const t = token(); return t ? `${t.type}${t.role ? ` (${t.role})` : ''}` : contextMenuId()! }
+          const layerIndex = () => token()?.layerIndex ?? 5
           return (
-            <div
-              id="token-ctx-menu"
-              style={`position:fixed;pointer-events:auto;z-index:60;left:${pos.x}px;top:${pos.y}px;transform:translate(-50%,-100%) translateY(-8px);background:rgba(10,14,10,0.94);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px 10px;box-shadow:0 4px 18px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:6px;min-width:140px;font-family:monospace;`}
-            >
-              <div style="color:rgba(200,137,58,0.9);font-size:10px;font-weight:700;text-align:center;">{label()}</div>
-              <div style="display:flex;justify-content:center;gap:4px;">
-                {(['n','e','s','w'] as FacingDir[]).map(dir => (
-                  <button
-                    onClick={() => handleContextFacing(dir)}
-                    style={`width:28px;height:28px;border-radius:5px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:11px;font-weight:700;color:#fff;background:${facing() === dir ? '#4a7a40' : 'rgba(40,50,40,0.9)'};`}
-                  >
-                    {dir.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={handleContextDelete}
-                style="padding:4px 8px;border-radius:5px;background:#7a2020;color:#fff;font-size:10px;font-weight:700;cursor:pointer;border:none;"
+            <>
+              <div
+                id="token-ctx-menu"
+                style={`position:fixed;pointer-events:auto;z-index:60;left:${pos.x}px;top:${pos.y}px;transform:translate(-50%,-100%) translateY(-8px);background:rgba(10,14,10,0.94);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px 10px;box-shadow:0 4px 18px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:6px;min-width:100px;font-family:monospace;`}
               >
-                Delete
-              </button>
-            </div>
+                <div style="color:rgba(200,137,58,0.9);font-size:10px;font-weight:700;text-align:center;">{label()}</div>
+                <button
+                  onClick={handleContextDelete}
+                  style="padding:4px 8px;border-radius:5px;background:#7a2020;color:#fff;font-size:10px;font-weight:700;cursor:pointer;border:none;"
+                >
+                  Delete
+                </button>
+              </div>
+              <DirectionPickerOverlay
+                screenX={pos.x}
+                screenY={pos.y}
+                cameraAlpha={cameraAlpha()}
+                onPick={(dir) => { handleContextFacing(dir) }}
+              />
+              <TokenLayerMoverOverlay
+                instanceId={contextMenuId()!}
+                layerIndex={layerIndex()}
+                screenX={pos.x + 70}
+                screenY={pos.y}
+                onMoveLayer={(id, newLayer) => {
+                  props.managers.spriteManager.setLayer(id, newLayer)
+                  setTokens(prev => prev.map(t => t.id === id ? { ...t, layerIndex: newLayer } : t))
+                }}
+              />
+            </>
           )
         }}
       </Show>

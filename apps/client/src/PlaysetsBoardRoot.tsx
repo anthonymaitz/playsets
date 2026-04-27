@@ -1,4 +1,4 @@
-import { createEffect, on, onMount, onCleanup, createSignal, Show, For } from 'solid-js'
+import { createEffect, on, onMount, onCleanup, createSignal, Show } from 'solid-js'
 import type { HighlightCell } from './board-element'
 import { PointerEventTypes } from '@babylonjs/core'
 import type { Scene, ArcRotateCamera, Mesh } from '@babylonjs/core'
@@ -14,6 +14,8 @@ import type { DragCallbacks } from './babylon/drag'
 import { WeatherSystem } from './babylon/weather'
 import { LayerBackgroundManager } from './babylon/layers'
 import { BuilderRoot } from './builder/BuilderRoot'
+import { DirectionPickerOverlay } from './overlays/DirectionPickerOverlay'
+import { TokenActionMenu } from './overlays/TokenActionMenu'
 
 // Local SceneToken — structurally matches shared-types SceneToken
 export interface SceneToken {
@@ -28,6 +30,7 @@ export interface SceneToken {
   level?: number
   spawnRadius?: number
   direction?: string
+  layerIndex?: number
 }
 
 export interface SceneData {
@@ -128,10 +131,11 @@ export function PlaysetsBoardRoot(props: Props) {
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
   let dragging: { entityId: string; startCol: number; startRow: number; lastCol: number; lastRow: number; moved: boolean } | null = null
-  const [ctxMenuId, setCtxMenuId] = createSignal<string | null>(null)
-  const [ctxMenuPos, setCtxMenuPos] = createSignal<{ x: number; y: number } | null>(null)
+  type DirPickerState = { instanceId: string; x: number; y: number; cameraAlpha: number }
+  const [dirPickerState, setDirPickerState] = createSignal<DirPickerState | null>(null)
+  const [tokenMenuId, setTokenMenuId] = createSignal<string | null>(null)
 
-  function getExploreMenuPos(instanceId: string): { x: number; y: number } | null {
+  function getEntityScreenPos(instanceId: string): { x: number; y: number } | null {
     if (!bjsScene || !bjsCamera) return null
     const mesh = exploreSpriteManager?.getMesh(instanceId)
     if (!mesh) return null
@@ -148,13 +152,14 @@ export function PlaysetsBoardRoot(props: Props) {
     return { x: s.x * scaleX + canvasBounds.left, y: s.y * scaleY + canvasBounds.top }
   }
 
-  function dismissExploreMenu() { setCtxMenuId(null); setCtxMenuPos(null) }
+  function dismissOverlays() { setDirPickerState(null); setTokenMenuId(null) }
 
-  function handleExploreContextFacing(dir: FacingDir) {
-    const id = ctxMenuId()
-    if (!id || !exploreSpriteManager) return
-    exploreSpriteManager.setFacing(id, dir)
-    props.host.dispatchEvent(new CustomEvent('tokenface', { bubbles: true, detail: { id, direction: dir } }))
+  function handleDirPick(dir: FacingDir) {
+    const state = dirPickerState()
+    if (!state || !exploreSpriteManager) return
+    exploreSpriteManager.setFacing(state.instanceId, dir)
+    props.host.dispatchEvent(new CustomEvent('tokenface', { bubbles: true, detail: { id: state.instanceId, direction: dir } }))
+    dismissOverlays()
   }
 
   function syncEntities(entities: EntityData[]) {
@@ -303,8 +308,8 @@ export function PlaysetsBoardRoot(props: Props) {
         syncEntities(props.entities)
 
         const onDocClick = (e: MouseEvent) => {
-          const menu = document.getElementById('explore-ctx-menu')
-          if (menu && !menu.contains(e.target as Node)) dismissExploreMenu()
+          const hasOverlay = document.getElementById('explore-dir-picker') || document.getElementById('explore-token-menu')
+          if (hasOverlay && !(e.target as Element)?.closest?.('#explore-dir-picker, #explore-token-menu')) dismissOverlays()
         }
         window.addEventListener('click', onDocClick, true)
 
@@ -341,6 +346,9 @@ export function PlaysetsBoardRoot(props: Props) {
                 const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
                 props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
               }
+              // After a drag, show direction picker so the player can choose which way to face
+              const pos = getEntityScreenPos(dragging.entityId)
+              if (pos) setDirPickerState({ instanceId: dragging.entityId, ...pos, cameraAlpha: bjsCamera?.alpha ?? 0 })
             }
             const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
             if (mesh) mesh.visibility = 1
@@ -351,16 +359,19 @@ export function PlaysetsBoardRoot(props: Props) {
             const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
             if (entityPick?.hit && entityPick.pickedMesh) {
               const instanceId = entityPick.pickedMesh.metadata?.instanceId as string
+              const isMe = !!(entityPick.pickedMesh.metadata?.draggable)
               const pos = entityPick.pickedMesh.position
               const { col, row } = worldToCell(pos.x, pos.z)
-              // Show in-canvas facing context menu
-              const menuPos = getExploreMenuPos(instanceId)
-              if (menuPos) { setCtxMenuId(instanceId); setCtxMenuPos(menuPos) }
+              if (isMe) {
+                const screenPos = getEntityScreenPos(instanceId)
+                if (screenPos) setDirPickerState({ instanceId, ...screenPos, cameraAlpha: bjsCamera?.alpha ?? 0 })
+                setTokenMenuId(instanceId)
+              }
               // spriteclick: let host show additional game-side UI (stats, abilities, etc.)
               props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: instanceId, x: col, y: row } }))
               props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
             } else {
-              dismissExploreMenu()
+              dismissOverlays()
               const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
               if (pick?.hit && pick.pickedPoint) {
                 const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
@@ -439,40 +450,46 @@ export function PlaysetsBoardRoot(props: Props) {
         )}
       </Show>
 
-      {/* Explore-mode token context menu — facing arrows */}
       {/* @ts-ignore */}
-      <Show when={ctxMenuId() !== null && ctxMenuPos() !== null}>
+      <Show when={dirPickerState() !== null}>
         {/* @ts-ignore */}
         {() => {
-          const pos = ctxMenuPos()!
-          const dirs: FacingDir[] = ['n', 'e', 's', 'w']
-          const labels: Record<FacingDir, string> = { n: 'N', e: 'E', s: 'S', w: 'W' }
+          const s = dirPickerState()!
           return (
             // @ts-ignore
-            <div
-              id="explore-ctx-menu"
-              style={`position:fixed;pointer-events:auto;z-index:60;left:${pos.x}px;top:${pos.y}px;transform:translate(-50%,-100%) translateY(-8px);background:rgba(10,14,10,0.94);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px 10px;box-shadow:0 4px 18px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:6px;min-width:100px;font-family:monospace;`}
-            >
-              <div style="color:rgba(200,137,58,0.9);font-size:10px;font-weight:700;text-align:center;">Facing</div>
+            <div id="explore-dir-picker" style="pointer-events:none;">
               {/* @ts-ignore */}
-              <div style="display:flex;justify-content:center;gap:4px;">
-                {/* @ts-ignore */}
-                <For each={dirs}>
-                  {/* @ts-ignore */}
-                  {(dir) => (
-                    // @ts-ignore
-                    <button
-                      onClick={() => { handleExploreContextFacing(dir); dismissExploreMenu() }}
-                      style={`width:28px;height:28px;border-radius:5px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:11px;font-weight:700;color:#fff;background:rgba(40,50,40,0.9);`}
-                    >
-                      {labels[dir]}
-                    </button>
-                  )}
-                </For>
-              </div>
+              <DirectionPickerOverlay
+                screenX={s.x}
+                screenY={s.y}
+                cameraAlpha={s.cameraAlpha}
+                onPick={handleDirPick}
+                onDismiss={dismissOverlays}
+              />
             </div>
           )
         }}
+      </Show>
+
+      {/* @ts-ignore */}
+      <Show when={tokenMenuId() !== null}>
+        {/* @ts-ignore */}
+        {() => (
+          // @ts-ignore
+          <div id="explore-token-menu">
+            {/* @ts-ignore */}
+            <TokenActionMenu
+              instanceId={tokenMenuId()!}
+              onEmote={(id, emote) => {
+                props.host.dispatchEvent(new CustomEvent('tokenemote', { bubbles: true, detail: { id, emote } }))
+              }}
+              onSpeech={(id, speech) => {
+                props.host.dispatchEvent(new CustomEvent('tokenspeech', { bubbles: true, detail: { id, speech } }))
+              }}
+              onDismiss={dismissOverlays}
+            />
+          </div>
+        )}
       </Show>
     </>
   )
