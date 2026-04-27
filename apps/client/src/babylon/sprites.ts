@@ -44,7 +44,7 @@ export class SpriteManager {
   private indicators = new Map<string, Mesh>()
   private tokenShadows = new Map<string, Mesh>()
   private textureCache = new Map<string, Texture>()
-  private ghost: { mesh: Mesh; mat: StandardMaterial; spriteId: string } | null = null
+  private ghost: { mesh: Mesh; mat: StandardMaterial; spriteId: string; indicator?: Mesh } | null = null
   private animationHandlers = new Map<string, () => void>()
   private shadowGen: ShadowGenerator | null = null
   private shadowsEnabled = true
@@ -419,7 +419,7 @@ export class SpriteManager {
     return this.meshes.get(instanceId)
   }
 
-  showPlacementGhost(spriteId: string, path: string, col: number, row: number): void {
+  showPlacementGhost(spriteId: string, path: string, col: number, row: number, facing?: FacingDir): void {
     const { x, z } = cellToWorld(col, row)
     const isTerrain = spriteId.startsWith('terrain/')
     const h = isTerrain ? TERRAIN_HEIGHT : SPRITE_HEIGHT
@@ -440,12 +440,32 @@ export class SpriteManager {
     }
     this.ghost.mesh.position = new Vector3(x, h / 2, z)
     this.ghost.mesh.isVisible = true
+
+    if (facing) {
+      if (!this.ghost.indicator) {
+        const ind = MeshBuilder.CreateDisc('ghost-dir', { radius: 0.22, tessellation: 3 }, this.scene)
+        ind.rotation.x = -Math.PI / 2
+        ind.renderingGroupId = 10
+        const mat = new StandardMaterial('ghost-dir-mat', this.scene)
+        mat.diffuseColor = new Color3(1, 0.85, 0.1)
+        mat.emissiveColor = new Color3(0.6, 0.5, 0)
+        mat.backFaceCulling = false
+        ind.material = mat
+        this.ghost.indicator = ind
+      }
+      this.ghost.indicator.position = new Vector3(x, 0.03, z)
+      this.ghost.indicator.rotation.y = FACING_ANGLE[facing]
+      this.ghost.indicator.isVisible = true
+    } else if (this.ghost.indicator) {
+      this.ghost.indicator.isVisible = false
+    }
   }
 
   hidePlacementGhost(): void {
     if (!this.ghost) return
     this.ghost.mesh.dispose()
     this.ghost.mat.dispose()
+    this.ghost.indicator?.dispose()
     this.ghost = null
   }
 

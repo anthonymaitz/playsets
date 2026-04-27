@@ -101,6 +101,13 @@ function entityDataUri(typeKey: string): string {
   return uri
 }
 
+function dragFacing(fromCol: number, fromRow: number, toCol: number, toRow: number): FacingDir {
+  const dc = toCol - fromCol
+  const dr = toRow - fromRow
+  if (Math.abs(dc) >= Math.abs(dr)) return dc >= 0 ? 'e' : 'w'
+  return dr >= 0 ? 's' : 'n'
+}
+
 function sceneBuildings(sceneData: SceneData): BuildingTile[] {
   return (sceneData.buildings ?? []).map(b => ({
     instanceId: b.instanceId ?? `${b.col},${b.row}`,
@@ -120,7 +127,7 @@ export function PlaysetsBoardRoot(props: Props) {
   const highlightMeshes: Mesh[] = []
   const [buildManagers, setBuildManagers] = createSignal<BuildManagers | null>(null)
 
-  let dragging: { entityId: string; lastCol: number; lastRow: number; moved: boolean } | null = null
+  let dragging: { entityId: string; startCol: number; startRow: number; lastCol: number; lastRow: number; moved: boolean } | null = null
 
   function syncEntities(entities: EntityData[]) {
     const sm = exploreSpriteManager
@@ -212,6 +219,8 @@ export function PlaysetsBoardRoot(props: Props) {
       const ctx = createScene(props.canvas)
       bjsScene = ctx.scene
       bjsCamera = ctx.camera
+      // Clear depth before rendering group 5 (sprites) so wall/building geometry (group 0) can't occlude tokens
+      bjsScene.setRenderingAutoClearDepthStencil(5, true)
       const ground = createGrid(bjsScene)
 
       buildingManager = new BuildingManager(bjsScene)
@@ -306,8 +315,11 @@ export function PlaysetsBoardRoot(props: Props) {
             // Prioritize sprite pick — the billboard plane is the correct hit target for entity clicks
             const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
             if (entityPick?.hit && entityPick.pickedMesh) {
+              const instanceId = entityPick.pickedMesh.metadata?.instanceId as string
               const pos = entityPick.pickedMesh.position
               const { col, row } = worldToCell(pos.x, pos.z)
+              // spriteclick: let host show context menu (facing, stats, etc.)
+              props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: instanceId, x: col, y: row } }))
               props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
             } else {
               const pick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => m.name === 'ground')
@@ -327,7 +339,7 @@ export function PlaysetsBoardRoot(props: Props) {
             const mesh = exploreSpriteManager?.getMesh(entityId)
             if (mesh) {
               const { col, row } = worldToCell(mesh.position.x, mesh.position.z)
-              dragging = { entityId, lastCol: col, lastRow: row, moved: false }
+              dragging = { entityId, startCol: col, startRow: row, lastCol: col, lastRow: row, moved: false }
               bjsCamera?.detachControl()
               mesh.visibility = 0.4
               const basePath = (mesh.metadata?.basePath as string) ?? ''
@@ -347,7 +359,8 @@ export function PlaysetsBoardRoot(props: Props) {
               dragging.moved = true
               const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
               const basePath = (mesh?.metadata?.basePath as string) ?? ''
-              exploreSpriteManager?.showPlacementGhost('tokens/ghost', basePath, col, row)
+              const facing = dragFacing(dragging.startCol, dragging.startRow, col, row)
+              exploreSpriteManager?.showPlacementGhost('tokens/ghost', basePath, col, row, facing)
               props.host.dispatchEvent(new CustomEvent('tokendrag', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
             }
           }
