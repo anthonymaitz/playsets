@@ -346,28 +346,29 @@ export function PlaysetsBoardRoot(props: Props) {
                 const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
                 props.host.dispatchEvent(new CustomEvent('tokenmove', { bubbles: true, detail: { id: dragging.entityId, x: col, y: row } }))
               }
-              // After a drag, show direction picker so the player can choose which way to face
-              const pos = getEntityScreenPos(dragging.entityId)
-              if (pos) setDirPickerState({ instanceId: dragging.entityId, ...pos, cameraAlpha: bjsCamera?.alpha ?? 0 })
             }
+            // Show dir picker + token menu whether it was a drag or a tap — own token always gets overlays
+            const pos = getEntityScreenPos(dragging.entityId)
+            if (pos) setDirPickerState({ instanceId: dragging.entityId, ...pos, cameraAlpha: bjsCamera?.alpha ?? 0 })
+            setTokenMenuId(dragging.entityId)
             const mesh = exploreSpriteManager?.getMesh(dragging.entityId)
             if (mesh) mesh.visibility = 1
             exploreSpriteManager?.hidePlacementGhost()
+            const entityId = dragging.entityId
             dragging = null
+            // Also dispatch spriteclick so game-side UI can react
+            const spriteMesh = exploreSpriteManager?.getMesh(entityId)
+            if (spriteMesh) {
+              const { col, row } = worldToCell(spriteMesh.position.x, spriteMesh.position.z)
+              props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: entityId, x: col, y: row } }))
+            }
           } else {
-            // Prioritize sprite pick — the billboard plane is the correct hit target for entity clicks
+            // Non-draggable entities (NPCs, enemies, doors) — dispatch events only
             const entityPick = bjsScene!.pick(bjsScene!.pointerX, bjsScene!.pointerY, (m) => !!(m.metadata?.instanceId))
             if (entityPick?.hit && entityPick.pickedMesh) {
               const instanceId = entityPick.pickedMesh.metadata?.instanceId as string
-              const isMe = !!(entityPick.pickedMesh.metadata?.draggable)
               const pos = entityPick.pickedMesh.position
               const { col, row } = worldToCell(pos.x, pos.z)
-              if (isMe) {
-                const screenPos = getEntityScreenPos(instanceId)
-                if (screenPos) setDirPickerState({ instanceId, ...screenPos, cameraAlpha: bjsCamera?.alpha ?? 0 })
-                setTokenMenuId(instanceId)
-              }
-              // spriteclick: let host show additional game-side UI (stats, abilities, etc.)
               props.host.dispatchEvent(new CustomEvent('spriteclick', { bubbles: true, detail: { id: instanceId, x: col, y: row } }))
               props.host.dispatchEvent(new CustomEvent('cellclick', { bubbles: true, detail: { x: col, y: row } }))
             } else {
