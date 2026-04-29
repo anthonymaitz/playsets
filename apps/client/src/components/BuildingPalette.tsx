@@ -14,7 +14,7 @@ export function BuildingPalette({ wallTileId, floorTileId, mode, onWallSelect, o
   const [tiles, setTiles] = useState<TileManifestEntry[]>([])
 
   useEffect(() => {
-    fetch('/assets/tiles/manifest.json')
+    fetch(import.meta.env.BASE_URL + 'assets/tiles/manifest.json')
       .then((r) => r.json())
       .then((data: { tiles: TileManifestEntry[] }) => setTiles(data.tiles))
       .catch(() => {})

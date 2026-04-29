@@ -33,7 +33,7 @@ export function SpritePicker({ selectedSpriteId, onSelect, onDeselect, activeWea
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/assets/sprites/manifest.json')
+    fetch(import.meta.env.BASE_URL + 'assets/sprites/manifest.json')
       .then((r) => r.json())
       .then(setManifest)
       .catch(() => setFetchError(true))

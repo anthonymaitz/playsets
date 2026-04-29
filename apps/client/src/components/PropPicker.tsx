@@ -22,7 +22,7 @@ export function PropPicker({ selectedPropId, onSelect, onDeselect }: Props) {
   const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
-    fetch('/assets/props/manifest.json')
+    fetch(import.meta.env.BASE_URL + 'assets/props/manifest.json')
       .then((r) => r.json())
       .then(setManifest)
       .catch(() => setFetchError(true))
