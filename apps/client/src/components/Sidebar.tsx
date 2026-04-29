@@ -194,7 +194,7 @@ function TileRow({ label, tiles, selectedId, onSelect }: { label: string; tiles:
             borderColor: selectedId === t.id ? '#f0a84a' : 'rgba(255,255,255,0.1)',
             borderRadius: 4, background: 'rgba(255,255,255,0.06)', cursor: 'pointer', padding: 2, overflow: 'hidden',
           }}>
-            <img src={t.path} alt={t.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={import.meta.env.BASE_URL + t.path.slice(1)} alt={t.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </button>
         ))}
       </div>

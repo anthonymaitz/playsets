@@ -469,7 +469,7 @@ export function RoomPage() {
         .filter((s) => s.col === col && s.row === row).length
       const instance = { instanceId: newInstanceId, spriteId: sprite.id, col, row, placedBy: lp.playerId, zOrder: existingCount, layerIndex: activeLayerIndexRef.current }
       useRoomStore.getState().placeSprite(instance)
-      spriteManager.place(instance, sprite.path)
+      spriteManager.place(instance, import.meta.env.BASE_URL + sprite.path.slice(1))
       sendMsg(sessionRef.current, { type: 'sprite:place', ...instance })
       setSelectedSprite(null)
       selectedSpriteRef.current = null
@@ -1220,7 +1220,7 @@ function setupScenePointerObservable(
     if (sprite && !dragController.isDragging()) {
       if (pick?.hit && pick.pickedPoint) {
         const { col, row } = worldToCell(pick.pickedPoint.x, pick.pickedPoint.z)
-        spriteManager.showPlacementGhost(sprite.id, sprite.path, col, row)
+        spriteManager.showPlacementGhost(sprite.id, import.meta.env.BASE_URL + sprite.path.slice(1), col, row)
       } else {
         spriteManager.hidePlacementGhost()
       }

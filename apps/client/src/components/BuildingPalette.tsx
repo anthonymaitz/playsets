@@ -40,7 +40,7 @@ export function BuildingPalette({ wallTileId, floorTileId, mode, onWallSelect, o
               cursor: 'pointer', padding: 2, overflow: 'hidden',
             }}
           >
-            <img src={t.path} alt={t.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={import.meta.env.BASE_URL + t.path.slice(1)} alt={t.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </button>
         ))}
       </div>

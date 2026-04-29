@@ -146,7 +146,7 @@ export function SpritePicker({ selectedSpriteId, onSelect, onDeselect, activeWea
                 userSelect: 'none',
               }}
             >
-              <img src={sprite.path} alt={sprite.label} draggable={false} style={{ width: 28, height: 28, objectFit: 'contain', pointerEvents: 'none' }} />
+              <img src={import.meta.env.BASE_URL + sprite.path.slice(1)} alt={sprite.label} draggable={false} style={{ width: 28, height: 28, objectFit: 'contain', pointerEvents: 'none' }} />
               {sprite.label}
             </button>
           ))}
